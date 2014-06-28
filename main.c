@@ -10,16 +10,17 @@
 #include <stdio.h>
 #include <ev.h>
 
+tcpserver_t *ts = NULL;
 
 void graceful_shutdown(int signum, siginfo_t *siginfo, void *context) {
 	stats_log("Received %s (signal %i), shutting down.", strsignal(signum), signum);
+	if(ts != NULL) {
+		tcpserver_destroy(ts);
+	}
 }
 
 int main(int argc, char **argv) {
-	ketama_continuum *kc;
-	tcpserver_t *ts;
-	int option_index = 0;
-	int c;
+	ketama_continuum kc;
 	struct sigaction sa;
 
 	if(argc < 2) {
@@ -41,14 +42,14 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	if(ketama_roll(kc, argv[1]) == 0) {
+	if(ketama_roll(&kc, argv[1]) == 0) {
 		stats_log(ketama_error());
 		stats_log("Unable to load ketama config from %s", argv[1]);
 		return 2;
 	}
 	//ketama_print_continuum(*kc);
 
-	ts = tcpserver_create((void *)kc);
+	ts = tcpserver_create(&kc);
 	if(ts == NULL) {
 		stats_log("Unable to create tcpserver");
 		return 3;
@@ -59,7 +60,7 @@ int main(int argc, char **argv) {
 	}
 
 	stats_log("main: tcpserver running");
-	tcpserver_run((void *)kc);
+	tcpserver_run(ts);
 
 	return 0;
 }

@@ -21,22 +21,38 @@ typedef struct {
 void *stats_connection(int sd, void *ctx) {
 	stats_log("Accepted connection on socket %i", sd);
 	stats_session_t *session;
+
 	session = (stats_session_t *)malloc(sizeof(stats_session_t));
+	if(session == NULL) {
+		stats_log("stats: Unable to allocate memory");
+		return NULL;
+	}
+
+	if(buffer_init(&session->buffer) != 0) {
+		stats_log("stats: Unable to initialize buffer");
+		free(session);
+		return NULL;
+	}
+
 	session->kc = (ketama_continuum *)ctx;
+
 	return (void *)session;
 }
 
 void stats_session_destroy(stats_session_t *session) {
+	stats_log("stats: Closing connection");
+	buffer_destroy(&session->buffer);
 	free(session);
 }
-
 
 int stats_relay_line(char *line, size_t len, stats_session_t *session) {
 	char *keyend;
 	size_t keylen;
 	mcs *server;
 
-	keyend = memchr(line, ' ', len);
+	line[len] = '\0';
+
+	keyend = memchr(line, ':', len);
 	if(keyend == NULL) {
 		return 1;
 	}
@@ -44,7 +60,7 @@ int stats_relay_line(char *line, size_t len, stats_session_t *session) {
 
 	keyend[0] = '\0';
 	server = ketama_get_server(line, *session->kc);
-	keyend[0] = ' ';
+	keyend[0] = ':';
 
 	stats_log("stats: Would send line \"%s\" to server \"%s\"", line, server->ip);
 
@@ -56,7 +72,7 @@ int stats_process_lines(stats_session_t *session) {
 	size_t len;
 
 	while(buffer_datacount(&session->buffer) > 0) {
-		head = buffer_head(&session->buffer);
+		head = (char *)buffer_head(&session->buffer);
 		tail = memchr(head, '\n', buffer_datacount(&session->buffer));
 
 		if(tail == NULL) {
@@ -72,7 +88,7 @@ int stats_process_lines(stats_session_t *session) {
 }
 
 int stats_recv(int sd, void *data, void *ctx) {
-	stats_session_t *session = (stats_session_t *)data;
+	stats_session_t *session = (stats_session_t *)ctx;
 
 	ssize_t bytes_read;
 	size_t space;
@@ -90,6 +106,7 @@ int stats_recv(int sd, void *data, void *ctx) {
 	bytes_read = recv(sd, buffer_tail(&session->buffer), space, 0);
 	if(bytes_read < 0) {
 		stats_log("stats: Error receiving from socket: %s", strerror(errno));
+		stats_session_destroy(session);
 		return 2;
 	}
 
@@ -110,5 +127,7 @@ int stats_recv(int sd, void *data, void *ctx) {
 		stats_session_destroy(session);
 		return 5;
 	}
+
+	return 0;
 }
 
