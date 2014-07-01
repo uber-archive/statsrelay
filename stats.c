@@ -1,13 +1,14 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-
-#include <glib.h>
+#include <errno.h>
 
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <errno.h>
+#include <time.h>
+
+#include <glib.h>
 
 #include "ketama.h"
 
@@ -19,6 +20,7 @@ struct stats_server_t {
 	char *ketama_filename;
 	ketama_continuum kc;
 	GHashTable *backends;
+	GHashTable *backoff_timers;
 };
 
 typedef struct {
@@ -32,6 +34,11 @@ typedef struct {
 	int sd;
 } stats_backend_t;
 
+typedef struct {
+	time_t last_kill;
+	int retry_count;
+} stats_backoff_timer_t;
+
 
 stats_server_t *stats_server_create(char *filename) {
 	stats_server_t *server;
@@ -44,6 +51,7 @@ stats_server_t *stats_server_create(char *filename) {
 	}
 
 	server->backends = g_hash_table_new(g_str_hash, g_str_equal);
+	server->backoff_timers = g_hash_table_new(g_str_hash, g_str_equal);
 
 	server->ketama_filename = filename;
 	if(ketama_roll(&server->kc, filename) == 0) {
@@ -87,6 +95,7 @@ void *stats_connection(int sd, void *ctx) {
 
 stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iplen) {
 	stats_backend_t *backend;
+	stats_backoff_timer_t *backoff;
 	struct addrinfo hints;
 	struct addrinfo *addr;
 	struct linger;
@@ -96,6 +105,25 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 
 	backend = g_hash_table_lookup(server->backends, ip);
 	if(backend == NULL) {
+		backoff = g_hash_table_lookup(server->backoff_timers, ip);
+		if(backoff == NULL) {
+			backoff = malloc(sizeof(stats_backoff_timer_t));
+			if(backoff == NULL) {
+				stats_log("stats: Cannot allocate memory for backend connection");
+				return NULL;
+			}
+
+			backoff->last_kill = 0;
+			backoff->retry_count = 0;
+			g_hash_table_insert(server->backoff_timers, ip, backoff);
+		}else{
+			if((time(NULL) - backoff->last_kill) < BACKEND_RETRY_TIMEOUT) {
+				return NULL;
+			}
+			backoff->retry_count++;
+			stats_log("stats: Retrying connection to backend %s #%i", ip, backoff->retry_count);
+		}
+
 		backend = malloc(sizeof(stats_backend_t));
 		if(backend == NULL) {
 			stats_log("stats: Cannot allocate memory for backend connection");
@@ -106,6 +134,8 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		address = malloc(iplen);
 		if(address == NULL) {
 			stats_log("stats: Cannot allocate memory for backend address");
+			free(backend);
+			free(backoff);
 			return NULL;
 		}
 		memcpy(address, ip, iplen);
@@ -113,6 +143,8 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		port = memchr(address, ':', iplen);
 		if(port == NULL) {
 			stats_log("stats: Unable to parse server address from config: %s", ip);
+			free(backend);
+			free(backoff);
 			free(address);
 			return NULL;
 		}
@@ -125,6 +157,8 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		hints.ai_flags = AI_PASSIVE;		// fill in my IP for me
 		if(getaddrinfo(address, port, &hints, &addr) != 0) {
 			stats_log("stats: Error resolving backend %s: %s", address, gai_strerror(errno));
+			free(backend);
+			free(backoff);
 			free(address);
 			return NULL;
 		}
@@ -136,6 +170,8 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		if(sd == -1) {
 			stats_log("stats: Unable to open backend socket: %s", strerror(errno));
 			freeaddrinfo(addr);
+			free(backend);
+			free(backoff);
 			free(address);
 			return NULL;
 		}
@@ -144,6 +180,8 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 			stats_log("stats: Unable to connect to %s: %s", address, strerror(errno));
 			close(sd);
 			freeaddrinfo(addr);
+			free(backend);
+			free(backoff);
 			free(address);
 			return NULL;
 		}
@@ -158,12 +196,20 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 }
 
 void stats_kill_backend(stats_server_t *server, stats_backend_t *backend, int remove_from_hash) {
+	stats_backoff_timer_t *backoff;
+
 	stats_log("stats: Killing backend %s", backend->key);
 	if(remove_from_hash) {
 		if(!g_hash_table_remove(server->backends, backend->key)) {
 			stats_log("stats: Backend %s could not be removed from backends list! This will probably leak memory, cause a double-free, kill your loved ones and crash.", backend->key);
 		}
 	}
+
+	backoff = g_hash_table_lookup(server->backoff_timers, backend->key);
+	if(backoff != NULL) {
+		backoff->last_kill = time(NULL);
+	}
+	
 	shutdown(backend->sd, SHUT_RDWR);
 	free(backend->key);
 	freeaddrinfo(backend->addr);

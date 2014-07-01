@@ -4,6 +4,9 @@
 #include <glib.h>
 #include "ketama.h"
 
+
+#define BACKEND_RETRY_TIMEOUT 5
+
 typedef struct stats_server_t stats_server_t;
 
 stats_server_t *stats_server_create(char *filename);
