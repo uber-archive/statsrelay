@@ -73,9 +73,9 @@ void stats_server_reload(stats_server_t *server) {
 }
 
 void *stats_connection(int sd, void *ctx) {
-	stats_log("Accepted connection on socket %i", sd);
 	stats_session_t *session;
 
+	stats_log("stats: Accepted connection on socket %i", sd);
 	session = (stats_session_t *)malloc(sizeof(stats_session_t));
 	if(session == NULL) {
 		stats_log("stats: Unable to allocate memory");
@@ -153,7 +153,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 
 		memset(&hints, 0, sizeof hints);	// make sure the struct is empty
 		hints.ai_family = AF_INET;			// ipv4
-		hints.ai_socktype = SOCK_DGRAM;		// udp
+		hints.ai_socktype = SOCK_STREAM;	// udp
 		hints.ai_flags = AI_PASSIVE;		// fill in my IP for me
 		if(getaddrinfo(address, port, &hints, &addr) != 0) {
 			stats_log("stats: Error resolving backend %s: %s", address, gai_strerror(errno));
@@ -277,7 +277,6 @@ int stats_process_lines(stats_session_t *session) {
 }
 
 void stats_session_destroy(stats_session_t *session) {
-	stats_log("stats: Closing connection");
 	buffer_destroy(&session->buffer);
 	free(session);
 }
