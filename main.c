@@ -1,9 +1,6 @@
 #include "tcpserver.h"
 #include "stats.h"
-#include "list.h"
 #include "log.h"
-
-#include "ketama.h"
 
 #include <signal.h>
 #include <string.h>
@@ -20,7 +17,7 @@ void graceful_shutdown(int signum, siginfo_t *siginfo, void *context) {
 }
 
 int main(int argc, char **argv) {
-	ketama_continuum kc;
+	stats_server_t *server;
 	struct sigaction sa;
 
 	if(argc < 2) {
@@ -42,14 +39,12 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	if(ketama_roll(&kc, argv[1]) == 0) {
-		stats_log(ketama_error());
-		stats_log("Unable to load ketama config from %s", argv[1]);
+	server = stats_server_create(argv[1]);
+	if(server == NULL) {
 		return 2;
 	}
-	//ketama_print_continuum(*kc);
 
-	ts = tcpserver_create(&kc);
+	ts = tcpserver_create(server);
 	if(ts == NULL) {
 		stats_log("Unable to create tcpserver");
 		return 3;
