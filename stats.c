@@ -153,7 +153,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 
 		memset(&hints, 0, sizeof hints);	// make sure the struct is empty
 		hints.ai_family = AF_INET;			// ipv4
-		hints.ai_socktype = SOCK_STREAM;	// udp
+		hints.ai_socktype = SOCK_STREAM;	// tcp
 		hints.ai_flags = AI_PASSIVE;		// fill in my IP for me
 		if(getaddrinfo(address, port, &hints, &addr) != 0) {
 			stats_log("stats: Error resolving backend %s: %s", address, gai_strerror(errno));
