@@ -16,6 +16,7 @@
 #include "log.h"
 
 struct stats_server_t {
+	char *ketama_filename;
 	ketama_continuum kc;
 	GHashTable *backends;
 };
@@ -44,6 +45,7 @@ stats_server_t *stats_server_create(char *filename) {
 
 	server->backends = g_hash_table_new(g_str_hash, g_str_equal);
 
+	server->ketama_filename = filename;
 	if(ketama_roll(&server->kc, filename) == 0) {
 		stats_log(ketama_error());
 		stats_log("stats: Unable to load ketama config from %s", filename);
@@ -52,6 +54,14 @@ stats_server_t *stats_server_create(char *filename) {
 	}
 
 	return server;
+}
+
+void stats_server_reload(stats_server_t *server) {
+	if(ketama_roll(&server->kc, server->ketama_filename) == 0) {
+		stats_log(ketama_error());
+		stats_log("stats: Unable to reload ketama config from %s", server->ketama_filename);
+	}
+	stats_log("stats: Reloaded from %s", server->ketama_filename);
 }
 
 void *stats_connection(int sd, void *ctx) {

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <ev.h>
 
+stats_server_t *server = NULL;
 tcpserver_t *ts = NULL;
 
 void graceful_shutdown(int signum, siginfo_t *siginfo, void *context) {
@@ -16,26 +17,42 @@ void graceful_shutdown(int signum, siginfo_t *siginfo, void *context) {
 	}
 }
 
+void reload_config(int signum, siginfo_t *siginfo, void *context) {
+	stats_log("Received %s (signal %i), reloading.", strsignal(signum), signum);
+	if(server != NULL) {
+		stats_server_reload(server);
+	}
+}
+
 int main(int argc, char **argv) {
-	stats_server_t *server;
-	struct sigaction sa;
+	struct sigaction sa_term;
+	struct sigaction sa_hup;
 
 	if(argc < 2) {
 		stats_log("Usage: %s <config file>", argv[0]);
 		return 1;
 	}
 
-	sa.sa_sigaction = graceful_shutdown;
-	sa.sa_flags = SA_SIGINFO;
-	sigemptyset(&sa.sa_mask);
+	sa_term.sa_sigaction = graceful_shutdown;
+	sa_term.sa_flags = SA_SIGINFO;
+	sigemptyset(&sa_term.sa_mask);
 
-	if(sigaction(SIGINT, &sa, NULL) != 0) {
+	if(sigaction(SIGINT, &sa_term, NULL) != 0) {
 		stats_log("Unable to setup SIGINT handler");
 		return 1;
 	}
 
-	if(sigaction(SIGTERM, &sa, NULL) != 0) {
+	if(sigaction(SIGTERM, &sa_term, NULL) != 0) {
 		stats_log("Unable to setup SIGTERM handler");
+		return 1;
+	}
+
+	sa_hup.sa_sigaction = reload_config;
+	sa_hup.sa_flags = SA_SIGINFO;
+	sigemptyset(&sa_term.sa_mask);
+
+	if(sigaction(SIGHUP, &sa_hup, NULL) != 0) {
+		stats_log("Unable to setup SIGHUP handler");
 		return 1;
 	}
 
