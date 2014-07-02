@@ -14,7 +14,6 @@ void udplistener_destroy(udpserver_t *server, udplistener_t *listener);
 
 udpserver_t *udpserver_create(struct ev_loop *loop, void *data);
 int udpserver_bind(udpserver_t *server, char *address_and_port, char *default_port, int (*cb_recv)(int, void *));
-void udpserver_run(udpserver_t *server);
 void udpserver_destroy(udpserver_t *server);
 
 #endif

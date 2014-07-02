@@ -308,19 +308,11 @@ int tcpserver_bind(tcpserver_t *server, char *address_and_port, char *default_po
 }
 
 
-void tcpserver_run(tcpserver_t *server) {
-	// TODO: this will never return, which means we never call destroy
-	ev_run(server->loop, 0);
-}
-
-
 void tcpserver_destroy(tcpserver_t *server) {
 	int i;
 
 	for(i = 0; i < server->listeners_len; i++) {
 		tcplistener_destroy(server, server->listeners[i]);
 	}
-	ev_break(server->loop, EVBREAK_ALL);
-	ev_loop_destroy(server->loop);
 	free(server);
 }

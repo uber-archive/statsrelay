@@ -127,6 +127,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		backend = malloc(sizeof(stats_backend_t));
 		if(backend == NULL) {
 			stats_log("stats: Cannot allocate memory for backend connection");
+			backoff->last_kill = time(NULL);
 			return NULL;
 		}
 
@@ -134,6 +135,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		address = malloc(iplen);
 		if(address == NULL) {
 			stats_log("stats: Cannot allocate memory for backend address");
+			backoff->last_kill = time(NULL);
 			free(backend);
 			return NULL;
 		}
@@ -142,6 +144,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		port = memchr(address, ':', iplen);
 		if(port == NULL) {
 			stats_log("stats: Unable to parse server address from config: %s", ip);
+			backoff->last_kill = time(NULL);
 			free(backend);
 			free(address);
 			return NULL;
@@ -155,6 +158,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		hints.ai_flags = AI_PASSIVE;		// fill in my IP for me
 		if(getaddrinfo(address, port, &hints, &addr) != 0) {
 			stats_log("stats: Error resolving backend %s: %s", address, gai_strerror(errno));
+			backoff->last_kill = time(NULL);
 			free(backend);
 			free(address);
 			return NULL;
@@ -166,6 +170,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 		if(sd == -1) {
 			stats_log("stats: Unable to open backend socket: %s", strerror(errno));
+			backoff->last_kill = time(NULL);
 			freeaddrinfo(addr);
 			free(backend);
 			free(address);
@@ -174,6 +179,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 
 		if(connect(sd, addr->ai_addr, addr->ai_addrlen) != 0) {
 			stats_log("stats: Unable to connect to %s: %s", address, strerror(errno));
+			backoff->last_kill = time(NULL);
 			close(sd);
 			freeaddrinfo(addr);
 			free(backend);

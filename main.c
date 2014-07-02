@@ -11,6 +11,8 @@
 stats_server_t *server = NULL;
 tcpserver_t *ts = NULL;
 udpserver_t *us = NULL;
+struct ev_loop *loop = NULL;
+
 
 void graceful_shutdown(int signum, siginfo_t *siginfo, void *context) {
 	stats_log("Received %s (signal %i), shutting down.", strsignal(signum), signum);
@@ -19,6 +21,11 @@ void graceful_shutdown(int signum, siginfo_t *siginfo, void *context) {
 	}
 	if(us != NULL) {
 		udpserver_destroy(us);
+	}
+
+	if(loop != NULL) {
+		ev_break(loop, EVBREAK_ALL);
+		ev_loop_destroy(loop);
 	}
 }
 
@@ -30,7 +37,6 @@ void reload_config(int signum, siginfo_t *siginfo, void *context) {
 }
 
 int main(int argc, char **argv) {
-	struct ev_loop *loop;
 	struct sigaction sa_term;
 	struct sigaction sa_hup;
 
@@ -90,7 +96,7 @@ int main(int argc, char **argv) {
 	}
 
 	stats_log("main: Starting event loop");
-	tcpserver_run(ts);
+	ev_run(loop, 0);
 
 	return 0;
 }
