@@ -19,12 +19,10 @@ int tcpsession_get_socket(tcpsession_t *session);
 void tcpsession_recv_callback(struct ev_loop *loop, struct ev_io *watcher, int revents);
 void tcpsession_destroy(tcpsession_t *session);
 
-tcpserver_t *tcpserver_create(void *data);
+tcpserver_t *tcpserver_create(struct ev_loop *loop, void *data);
 int tcpserver_bind(tcpserver_t *server, char *address_and_port, char *default_port, void *(*cb_conn)(int, void *), int (*cb_recv)(int, void *, void *));
 void tcpserver_run(tcpserver_t *server);
 void tcpserver_destroy(tcpserver_t *server);
 
-// ipstr must be a pointer to at least INET6_ADDRSTRLEN
-int tcpserver_get_peer_name(int sd, char *ipstr);
 
 #endif

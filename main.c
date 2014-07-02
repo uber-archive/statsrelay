@@ -1,4 +1,5 @@
 #include "tcpserver.h"
+#include "udpserver.h"
 #include "stats.h"
 #include "log.h"
 
@@ -9,11 +10,15 @@
 
 stats_server_t *server = NULL;
 tcpserver_t *ts = NULL;
+udpserver_t *us = NULL;
 
 void graceful_shutdown(int signum, siginfo_t *siginfo, void *context) {
 	stats_log("Received %s (signal %i), shutting down.", strsignal(signum), signum);
 	if(ts != NULL) {
 		tcpserver_destroy(ts);
+	}
+	if(us != NULL) {
+		udpserver_destroy(us);
 	}
 }
 
@@ -25,6 +30,7 @@ void reload_config(int signum, siginfo_t *siginfo, void *context) {
 }
 
 int main(int argc, char **argv) {
+	struct ev_loop *loop;
 	struct sigaction sa_term;
 	struct sigaction sa_hup;
 
@@ -61,7 +67,9 @@ int main(int argc, char **argv) {
 		return 2;
 	}
 
-	ts = tcpserver_create(server);
+	loop = ev_default_loop(0);
+
+	ts = tcpserver_create(loop, server);
 	if(ts == NULL) {
 		stats_log("Unable to create tcpserver");
 		return 3;
@@ -71,7 +79,17 @@ int main(int argc, char **argv) {
 		return 4;
 	}
 
-	stats_log("main: tcpserver running");
+	us = udpserver_create(loop, server);
+	if(us == NULL) {
+		stats_log("Unable to create udpserver");
+		return 5;
+	}
+
+	if(udpserver_bind(us, "*", "8125", stats_udp_recv) != 0) {
+		return 6;
+	}
+
+	stats_log("main: Starting event loop");
 	tcpserver_run(ts);
 
 	return 0;

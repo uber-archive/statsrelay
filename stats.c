@@ -135,7 +135,6 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		if(address == NULL) {
 			stats_log("stats: Cannot allocate memory for backend address");
 			free(backend);
-			free(backoff);
 			return NULL;
 		}
 		memcpy(address, ip, iplen);
@@ -144,7 +143,6 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		if(port == NULL) {
 			stats_log("stats: Unable to parse server address from config: %s", ip);
 			free(backend);
-			free(backoff);
 			free(address);
 			return NULL;
 		}
@@ -158,7 +156,6 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		if(getaddrinfo(address, port, &hints, &addr) != 0) {
 			stats_log("stats: Error resolving backend %s: %s", address, gai_strerror(errno));
 			free(backend);
-			free(backoff);
 			free(address);
 			return NULL;
 		}
@@ -171,7 +168,6 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 			stats_log("stats: Unable to open backend socket: %s", strerror(errno));
 			freeaddrinfo(addr);
 			free(backend);
-			free(backoff);
 			free(address);
 			return NULL;
 		}
@@ -181,7 +177,6 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 			close(sd);
 			freeaddrinfo(addr);
 			free(backend);
-			free(backoff);
 			free(address);
 			return NULL;
 		}
@@ -216,7 +211,7 @@ void stats_kill_backend(stats_server_t *server, stats_backend_t *backend, int re
 	free(backend);
 }
 
-int stats_relay_line(char *line, size_t len, stats_session_t *session) {
+int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 	stats_backend_t *backend;
 	ssize_t sent;
 
@@ -234,11 +229,11 @@ int stats_relay_line(char *line, size_t len, stats_session_t *session) {
 	//keylen = keyend - line;
 
 	keyend[0] = '\0';
-	server = ketama_get_server(line, session->server->kc);
+	server = ketama_get_server(line, ss->kc);
 	keyend[0] = ':';
 	line[len] = '\n';
 
-	backend = stats_get_backend(session->server, server->ip, sizeof(server->ip));
+	backend = stats_get_backend(ss, server->ip, sizeof(server->ip));
 	if(backend == NULL) {
 		return 1;
 	}
@@ -246,7 +241,7 @@ int stats_relay_line(char *line, size_t len, stats_session_t *session) {
 	sent = send(backend->sd, line, len, 0);
 	if(sent == -1) {
 		stats_log("stats: Error sending line: %s", strerror(errno));
-		stats_kill_backend(session->server, backend, 1);
+		stats_kill_backend(ss, backend, 1);
 		return 1;
 	}
 	if(sent != len) {
@@ -269,7 +264,7 @@ int stats_process_lines(stats_session_t *session) {
 		}
 
 		len = tail - head;
-		stats_relay_line(head, len, session);
+		stats_relay_line(head, len, session->server);
 		buffer_consume(&session->buffer, len + 1);	// Add 1 to include the '\n'
 	}
 
@@ -320,6 +315,30 @@ int stats_recv(int sd, void *data, void *ctx) {
 		stats_log("stats: Invalid line processed, closing connection");
 		stats_session_destroy(session);
 		return 5;
+	}
+
+	return 0;
+}
+
+int stats_udp_recv(int sd, void *data) {
+	stats_server_t *ss = (stats_server_t *)data;
+	ssize_t bytes_read;
+	char buffer[MAX_UDP_LENGTH];
+
+	bytes_read = recvfrom(sd, buffer, MAX_UDP_LENGTH, 0, NULL, NULL);
+
+	if(bytes_read == 0) {
+		stats_log("stats: Got zero-length UDP payload. That's weird.");
+		return 1;
+	}
+
+	if(bytes_read < 0) {
+		stats_log("stats: Error calling recvfrom: %s", strerror(errno));
+		return 2;
+	}
+
+	if(stats_relay_line(buffer, bytes_read, ss) != 0) {
+		return 3;
 	}
 
 	return 0;
