@@ -14,66 +14,52 @@ udpserver_t *us = NULL;
 struct ev_loop *loop = NULL;
 
 
-void graceful_shutdown(int signum, siginfo_t *siginfo, void *context) {
-	stats_log("Received %s (signal %i), shutting down.", strsignal(signum), signum);
+void graceful_shutdown(struct ev_loop *loop, ev_signal *w, int revents) {
+	//stats_log("Received %s (signal %i), shutting down.", strsignal(signum), signum);
+	stats_log("Received signal, shutting down.");
+	ev_break(loop, EVBREAK_ALL);
+
 	if(ts != NULL) {
 		tcpserver_destroy(ts);
 	}
 	if(us != NULL) {
 		udpserver_destroy(us);
 	}
-
-	if(loop != NULL) {
-		ev_break(loop, EVBREAK_ALL);
-		ev_loop_destroy(loop);
+	if(server != NULL) {
+		stats_server_destroy(server);
 	}
 }
 
-void reload_config(int signum, siginfo_t *siginfo, void *context) {
-	stats_log("Received %s (signal %i), reloading.", strsignal(signum), signum);
+void reload_config(struct ev_loop *loop, ev_signal *w, int revents) {
+	stats_log("Received SIGHUP, reloading.");
 	if(server != NULL) {
 		stats_server_reload(server);
 	}
 }
 
 int main(int argc, char **argv) {
-	struct sigaction sa_term;
-	struct sigaction sa_hup;
+	ev_signal sigint_watcher, sigterm_watcher, sighup_watcher;
 
 	if(argc < 2) {
 		stats_log("Usage: %s <config file>", argv[0]);
 		return 1;
 	}
 
-	sa_term.sa_sigaction = graceful_shutdown;
-	sa_term.sa_flags = SA_SIGINFO;
-	sigemptyset(&sa_term.sa_mask);
+	loop = ev_default_loop(0);
 
-	if(sigaction(SIGINT, &sa_term, NULL) != 0) {
-		stats_log("Unable to setup SIGINT handler");
-		return 1;
-	}
+	ev_signal_init(&sigint_watcher, graceful_shutdown, SIGINT);
+	ev_signal_start(loop, &sigint_watcher);
 
-	if(sigaction(SIGTERM, &sa_term, NULL) != 0) {
-		stats_log("Unable to setup SIGTERM handler");
-		return 1;
-	}
+	ev_signal_init(&sigterm_watcher, graceful_shutdown, SIGTERM);
+	ev_signal_start(loop, &sigterm_watcher);
 
-	sa_hup.sa_sigaction = reload_config;
-	sa_hup.sa_flags = SA_SIGINFO;
-	sigemptyset(&sa_term.sa_mask);
+	ev_signal_init(&sighup_watcher, reload_config, SIGHUP);
+	ev_signal_start(loop, &sighup_watcher);
 
-	if(sigaction(SIGHUP, &sa_hup, NULL) != 0) {
-		stats_log("Unable to setup SIGHUP handler");
-		return 1;
-	}
-
-	server = stats_server_create(argv[1]);
+	server = stats_server_create(argv[1], loop);
 	if(server == NULL) {
 		return 2;
 	}
-
-	loop = ev_default_loop(0);
 
 	ts = tcpserver_create(loop, server);
 	if(ts == NULL) {
@@ -94,6 +80,7 @@ int main(int argc, char **argv) {
 	if(udpserver_bind(us, "*", "8125", stats_udp_recv) != 0) {
 		return 6;
 	}
+
 
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);

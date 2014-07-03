@@ -2,6 +2,7 @@
 #define STATS_H
 
 #include <glib.h>
+#include <ev.h>
 #include "ketama.h"
 
 #define BACKEND_RETRY_TIMEOUT 5
@@ -9,7 +10,7 @@
 
 typedef struct stats_server_t stats_server_t;
 
-stats_server_t *stats_server_create(char *filename);
+stats_server_t *stats_server_create(char *filename, struct ev_loop *loop);
 void stats_server_reload(stats_server_t *server);
 void stats_server_destroy(stats_server_t *server);
 

@@ -13,21 +13,17 @@
 
 #include "ketama.h"
 
+#include "tcpclient.h"
 #include "buffer.h"
 #include "stats.h"
 #include "log.h"
 
-enum backend_state {
-	STATE_INIT = 0,
-	STATE_CONNECTING,
-	STATE_CONNECTED,
-	STATE_BACKOFF
-};
 
 struct stats_server_t {
 	char *ketama_filename;
 	ketama_continuum kc;
 	GHashTable *backends;
+	struct ev_loop *loop;
 };
 
 typedef struct {
@@ -36,16 +32,12 @@ typedef struct {
 } stats_session_t;
 
 typedef struct {
-	struct addrinfo *addr;
+	tcpclient_t client;
 	char *key;
-	int sd;
-	enum backend_state state;
-	time_t last_kill;
-	int retry_count;
 } stats_backend_t;
 
 
-stats_server_t *stats_server_create(char *filename) {
+stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 	stats_server_t *server;
 
 	server = malloc(sizeof(stats_server_t));
@@ -55,6 +47,7 @@ stats_server_t *stats_server_create(char *filename) {
 		return NULL;
 	}
 
+	server->loop = loop;
 	server->backends = g_hash_table_new(g_str_hash, g_str_equal);
 
 	server->ketama_filename = filename;
@@ -99,12 +92,9 @@ void *stats_connection(int sd, void *ctx) {
 
 stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iplen) {
 	stats_backend_t *backend;
-	struct addrinfo hints;
-	struct addrinfo *addr;
-	struct linger;
 	char *address;
 	char *port;
-	int sd;
+	int ret;
 
 	backend = g_hash_table_lookup(server->backends, ip);
 	if(backend == NULL) {
@@ -113,27 +103,13 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 			stats_log("stats: Cannot allocate memory for backend connection");
 			return NULL;
 		}
-		backend->state = STATE_INIT;
-		backend->last_kill = 0;
-		backend->retry_count = 0;
-
-		g_hash_table_insert(server->backends, ip, backend);
-	}
-
-	if(backend->state == STATE_CONNECTED) {
-		return backend;
-	}
-
-	if(backend->state == STATE_BACKOFF) {
-		if((time(NULL) - backend->last_kill) < BACKEND_RETRY_TIMEOUT) {
-			// retry timeout hasn't expired yet
+		if(tcpclient_init(&backend->client, server->loop) != 0) {
+			stats_log("stats: Unable to initialize tcpclient");
+			free(backend);
 			return NULL;
-		}else{
-			backend->state = STATE_INIT;
-		}
-	}
+		};
+		g_hash_table_insert(server->backends, ip, backend);
 
-	if(backend->state == STATE_INIT) {
 		// Make a copy of the address because it's immutableish
 		address = malloc(iplen);
 		if(address == NULL) {
@@ -146,65 +122,22 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		port = memchr(address, ':', iplen);
 		if(port == NULL) {
 			stats_log("stats: Unable to parse server address from config: %s", ip);
-			backend->last_kill = time(NULL);
-			backend->state = STATE_BACKOFF;
 			free(address);
 			return NULL;
 		}
 		port[0] = '\0';
 		port++;
 
-		memset(&hints, 0, sizeof hints);	// make sure the struct is empty
-		hints.ai_family = AF_INET;			// ipv4
-		hints.ai_socktype = SOCK_STREAM;	// tcp
-		hints.ai_flags = AI_PASSIVE;		// fill in my IP for me
-		if(getaddrinfo(address, port, &hints, &addr) != 0) {
-			stats_log("stats: Error resolving backend %s: %s", address, gai_strerror(errno));
-			backend->last_kill = time(NULL);
-			backend->state = STATE_BACKOFF;
+		ret = tcpclient_connect(&backend->client, address, port);
+		if(ret != 0) {
+			stats_log("stats: Error connecting to [%s]:%s (tcpclient_connect returned %i)", address, port, ret);
 			free(address);
 			return NULL;
 		}
-			
+
 		port--;
 		port[0] = ':';
 
-		sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-		if(sd == -1) {
-			stats_log("stats: Unable to open backend socket: %s", strerror(errno));
-			backend->last_kill = time(NULL);
-			backend->state = STATE_BACKOFF;
-			freeaddrinfo(addr);
-			free(address);
-			return NULL;
-		}
-
-		if(fcntl(sd, F_SETFL, (fcntl(sd, F_GETFL) | O_NONBLOCK)) != 0) {
-			stats_log("stats: Unable to set backend socket to non-blocking: %s", strerror(errno));
-			backend->last_kill = time(NULL);
-			backend->state = STATE_BACKOFF;
-			close(sd);
-			freeaddrinfo(addr);
-			free(address);
-			return NULL;
-		}
-
-		backend->state = STATE_CONNECTING;
-		backend->addr = addr;
-		backend->sd = sd;
-
-		if(connect(sd, addr->ai_addr, addr->ai_addrlen) != 0 && errno != EINPROGRESS) {
-			stats_log("stats: Unable to connect to %s: %s", address, strerror(errno));
-			backend->last_kill = time(NULL);
-			backend->state = STATE_BACKOFF;
-			close(sd);
-			freeaddrinfo(addr);
-			free(address);
-			return NULL;
-		}
-
-		backend->state = STATE_CONNECTED;
-		stats_log("stats: Connected to backend %s", backend->key);
 		return backend;
 	}
 
@@ -213,16 +146,12 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 
 void stats_kill_backend(stats_server_t *server, stats_backend_t *backend) {
 	stats_log("stats: Killing backend %s", backend->key);
-	backend->state = STATE_BACKOFF;
-
-	shutdown(backend->sd, SHUT_RDWR);
 	free(backend->key);
-	freeaddrinfo(backend->addr);
+	tcpclient_destroy(&backend->client, 1);
 }
 
 int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 	stats_backend_t *backend;
-	ssize_t sent;
 
 	char *keyend;
 	//size_t keylen;
@@ -247,14 +176,9 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 		return 1;
 	}
 
-	sent = send(backend->sd, line, len, 0);
-	if(sent == -1) {
-		stats_log("stats: Error sending line: %s", strerror(errno));
-		stats_kill_backend(ss, backend);
-		return 1;
-	}
-	if(sent != len) {
-		stats_log("stats: Sent %i/%i bytes", sent, len);
+	if(tcpclient_sendall(&backend->client, line, len+1) != 0) {
+		stats_log("stats: Error sending to backend %s", backend->key);
+		return 2;
 	}
 
 	return 0;
