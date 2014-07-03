@@ -1,0 +1,5 @@
+statsrelay (1.0.0) unstable; urgency=low
+
+  * Initial release (Closes: T14501)
+
+ -- Jeremy Grosser <jeremy@synack.me>  Thu, 03 Jul 2014 15:52:52 -0700

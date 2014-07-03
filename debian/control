@@ -1,0 +1,11 @@
+Source: statsrelay
+Section: net
+Priority: extra
+Maintainer: Jeremy Grosser <jeremy@synack.me>
+Build-Depends: debhelper (>= 8.0.0), libev-dev (>= 4.11), libglib2.0-dev (>= 2.32.4)
+Standards-Version: 3.9.3
+
+Package: statsrelay
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A consistent-hashing relay for statsd metrics
