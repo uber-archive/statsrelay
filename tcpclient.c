@@ -84,6 +84,10 @@ void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int event
 	}
 
 	buf = malloc(TCPCLIENT_RECV_BUFFER);
+	if(buf == NULL) {
+		stats_log("tcpclient: Unable to allocate memory for receive buffer");
+		return;
+	}
 	len = recv(client->sd, buf, TCPCLIENT_RECV_BUFFER, 0);
 	if(len < 0) {
 		stats_log("tcpclient: Error from recv: %s", strerror(errno));
@@ -272,7 +276,10 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 	}
 
 	while(buffer_spacecount(&client->send_queue) < len) {
-		buffer_expand(&client->send_queue);
+		if(buffer_expand(&client->send_queue) != 0) {
+			stats_log("tcpclient: Unable to allocate additional memory for send queue, dropping data");
+			return 3;
+		}
 	}
 	memcpy(buffer_tail(&client->send_queue), buf, len);
 	buffer_produced(&client->send_queue, len);

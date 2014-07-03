@@ -70,6 +70,9 @@ unsigned char *buffer_tail(buffer_t *b)
 unsigned char *myrealloc(unsigned char *p, size_t old, size_t new)
 {
     unsigned char *pnew = malloc(new);
+	if(pnew == NULL) {
+		return NULL;
+	}
     memcpy(pnew, p, old);
     free(p);
     return pnew;
