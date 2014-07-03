@@ -4,9 +4,11 @@
 #include <errno.h>
 #include <fcntl.h>
 
+#include <inttypes.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdio.h>
 #include <time.h>
 
 #include <glib.h>
@@ -24,16 +26,28 @@ struct stats_server_t {
 	ketama_continuum kc;
 	GHashTable *backends;
 	struct ev_loop *loop;
+
+	uint64_t bytes_recv_udp;
+	uint64_t bytes_recv_tcp;
+	uint64_t total_connections;
+	uint64_t malformed_lines;
+	time_t last_reload;
 };
 
 typedef struct {
 	stats_server_t *server;
 	buffer_t buffer;
+	int sd;
 } stats_session_t;
 
 typedef struct {
 	tcpclient_t client;
 	char *key;
+
+	uint64_t bytes_queued;
+	uint64_t bytes_sent;
+	uint64_t relayed_lines;
+	uint64_t dropped_lines;
 } stats_backend_t;
 
 
@@ -58,6 +72,12 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 		return NULL;
 	}
 
+	server->bytes_recv_udp = 0;
+	server->bytes_recv_tcp = 0;
+	server->malformed_lines = 0;
+	server->total_connections = 0;
+	server->last_reload = 0;
+
 	return server;
 }
 
@@ -67,6 +87,7 @@ void stats_server_reload(stats_server_t *server) {
 		stats_log("stats: Unable to reload ketama config from %s", server->ketama_filename);
 	}
 	stats_log("stats: Reloaded from %s", server->ketama_filename);
+	server->last_reload = time(NULL);
 }
 
 void *stats_connection(int sd, void *ctx) {
@@ -86,8 +107,15 @@ void *stats_connection(int sd, void *ctx) {
 	}
 
 	session->server = (stats_server_t *)ctx;
+	session->server->total_connections++;
+	session->sd = sd;
 
 	return (void *)session;
+}
+
+void stats_sent(void *tcpclient, enum tcpclient_event event, void *context, char *data, size_t len) {
+	stats_backend_t *backend = (stats_backend_t *)context;
+	backend->bytes_sent += len;
 }
 
 stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iplen) {
@@ -103,7 +131,13 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 			stats_log("stats: Cannot allocate memory for backend connection");
 			return NULL;
 		}
-		if(tcpclient_init(&backend->client, server->loop) != 0) {
+
+		backend->bytes_queued = 0;
+		backend->bytes_sent = 0;
+		backend->relayed_lines = 0;
+		backend->dropped_lines = 0;
+
+		if(tcpclient_init(&backend->client, server->loop, (void *)&backend) != 0) {
 			stats_log("stats: Unable to initialize tcpclient");
 			free(backend);
 			return NULL;
@@ -161,6 +195,7 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 
 	keyend = memchr(line, ':', len);
 	if(keyend == NULL) {
+		ss->malformed_lines++;
 		stats_log("stats: dropping malformed line: \"%s\"", line);
 		return 1;
 	}
@@ -173,15 +208,96 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 
 	backend = stats_get_backend(ss, server->ip, sizeof(server->ip));
 	if(backend == NULL) {
+		backend->dropped_lines++;
 		return 1;
 	}
 
 	if(tcpclient_sendall(&backend->client, line, len+1) != 0) {
+		backend->dropped_lines++;
 		stats_log("stats: Error sending to backend %s", backend->key);
 		return 2;
 	}
 
+	backend->bytes_queued += len+1;
+	backend->relayed_lines++;
+
 	return 0;
+}
+
+void stats_send_statistics(stats_session_t *session) {
+	GHashTableIter iter;
+	gpointer key, value;
+	buffer_t *response;
+	stats_backend_t *backend;
+	ssize_t bytes_sent;
+
+	response = create_buffer(65536);
+
+	buffer_produced(response,
+		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+		"global bytes_recv_udp counter %" PRIu64 "\n",
+		session->server->bytes_recv_udp));
+
+	buffer_produced(response,
+		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+		"global bytes_recv_tcp counter %" PRIu64 "\n",
+		session->server->bytes_recv_tcp));
+
+	buffer_produced(response,
+		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+		"global total_connections counter %" PRIu64 "\n",
+		session->server->total_connections));
+
+	buffer_produced(response,
+		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+		"global last_reload timestamp %" PRIu64 "\n",
+		session->server->last_reload));
+
+	buffer_produced(response,
+		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+		"global malformed_lines counter %" PRIu64 "\n",
+		session->server->malformed_lines));
+
+	g_hash_table_iter_init(&iter, session->server->backends);
+	while(g_hash_table_iter_next(&iter, &key, &value)) {
+		backend = (stats_backend_t *)value;
+
+		buffer_produced(response,
+			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+			"backend:%s bytes_queued counter %" PRIu64 "\n",
+			backend->key, backend->bytes_queued));
+
+		buffer_produced(response,
+			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+			"backend:%s bytes_sent counter %" PRIu64 "\n",
+			backend->key, backend->bytes_sent));
+
+		buffer_produced(response,
+			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+			"backend:%s relayed_lines counter %" PRIu64 "\n",
+			backend->key, backend->relayed_lines));
+
+		buffer_produced(response,
+			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+			"backend:%s dropped_lines counter %" PRIu64 "\n",
+			backend->key, backend->dropped_lines));
+	}
+
+	while(buffer_datacount(response) > 0) {
+		bytes_sent = send(session->sd, buffer_head(response), buffer_datacount(response), 0);
+		if(bytes_sent < 0) {
+			stats_log("stats: Error sending status response: %s", strerror(errno));
+			break;
+		}
+
+		if(bytes_sent == 0) {
+			stats_log("stats: Error sending status response: Client closed connection");
+			break;
+		}
+
+		buffer_consume(response, bytes_sent);
+	}
+	delete_buffer(response);
 }
 
 int stats_process_lines(stats_session_t *session) {
@@ -197,7 +313,12 @@ int stats_process_lines(stats_session_t *session) {
 		}
 
 		len = tail - head;
-		stats_relay_line(head, len, session->server);
+
+		if(memcmp(head, "status", len) == 0) {
+			stats_send_statistics(session);
+		}else{
+			stats_relay_line(head, len, session->server);
+		}
 		buffer_consume(&session->buffer, len + 1);	// Add 1 to include the '\n'
 	}
 
@@ -238,6 +359,8 @@ int stats_recv(int sd, void *data, void *ctx) {
 		return 3;
 	}
 
+	session->server->bytes_recv_tcp += bytes_read;
+
 	if(buffer_produced(&session->buffer, bytes_read) != 0) {
 		stats_log("stats: Unable to consume buffer by %i bytes, aborting", bytes_read);
 		stats_session_destroy(session);
@@ -269,6 +392,8 @@ int stats_udp_recv(int sd, void *data) {
 		stats_log("stats: Error calling recvfrom: %s", strerror(errno));
 		return 2;
 	}
+
+	ss->bytes_recv_udp += bytes_read;
 
 	if(stats_relay_line(buffer, bytes_read, ss) != 0) {
 		return 3;

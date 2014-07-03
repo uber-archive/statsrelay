@@ -17,7 +17,7 @@
 #include <ev.h>
 
 
-int tcpclient_default_callback(void *tc, enum tcpclient_event event, char *data, size_t len) {
+int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *context, char *data, size_t len) {
 	// default is to do nothing
 	if(event == EVENT_RECV) {
 		free(data);
@@ -39,10 +39,10 @@ void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *watcher, i
 	stats_log("tcpclient: Connection timeout");
 	client->last_error = time(NULL);
 	tcpclient_set_state(client, STATE_BACKOFF);
-	client->callback_error(client, EVENT_ERROR, NULL, 0);
+	client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 }
 
-int tcpclient_init(tcpclient_t *client, struct ev_loop *loop) {
+int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_context) {
 	client->state = STATE_INIT;
 	client->loop = loop;
 	client->sd = -1;
@@ -52,6 +52,7 @@ int tcpclient_init(tcpclient_t *client, struct ev_loop *loop) {
 	client->callback_sent = &tcpclient_default_callback;
 	client->callback_recv = &tcpclient_default_callback;
 	client->callback_error = &tcpclient_default_callback;
+	client->callback_context = callback_context;
 	buffer_init(&client->send_queue);
 	ev_timer_init(&client->timeout_watcher, tcpclient_connect_timeout, TCPCLIENT_CONNECT_TIMEOUT, 0);
 
@@ -97,7 +98,7 @@ void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int event
 		free(buf);
 		tcpclient_set_state(client, STATE_BACKOFF);
 		client->last_error = time(NULL);
-		client->callback_error(client, EVENT_ERROR, NULL, 0);
+		client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 		return;
 	}
 
@@ -109,10 +110,10 @@ void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int event
 		free(buf);
 		tcpclient_set_state(client, STATE_BACKOFF);
 		client->last_error = time(NULL);
-		client->callback_error(client, EVENT_ERROR, NULL, 0);
+		client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 		return;
 	}
-	client->callback_recv(client, EVENT_RECV, buf, len);
+	client->callback_recv(client, EVENT_RECV, client->callback_context, buf, len);
 }
 
 
@@ -133,11 +134,11 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
 			close(client->sd);
-			client->callback_error(client, EVENT_ERROR, NULL, 0);
+			client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 			return;
 		}
 
-		client->callback_sent(client, EVENT_SENT, (char *)buffer_head(&client->send_queue), (size_t)len);
+		client->callback_sent(client, EVENT_SENT, client->callback_context, (char *)buffer_head(&client->send_queue), (size_t)len);
 		buffer_consume(&client->send_queue, len);
 		buffer_realign(&client->send_queue);
 	}else{
@@ -174,7 +175,7 @@ void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int events
 	ev_io_start(client->loop, &client->read_watcher);
 	ev_io_start(client->loop, &client->write_watcher);
 
-	client->callback_connect(client, EVENT_CONNECTED, NULL, 0);
+	client->callback_connect(client, EVENT_CONNECTED, client->callback_context, NULL, 0);
 }
 
 int tcpclient_connect(tcpclient_t *client, char *host, char *port) {
@@ -208,7 +209,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port) {
 				stats_log("tcpclient: Error resolving backend address %s: %s", host, gai_strerror(errno));
 				client->last_error = time(NULL);
 				tcpclient_set_state(client, STATE_BACKOFF);
-				client->callback_error(client, EVENT_ERROR, NULL, 0);
+				client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 				return 3;
 			}
 			client->addr = addr;
@@ -220,7 +221,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port) {
 			stats_log("tcpclient: Unable to create socket: %s", strerror(errno));
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
-			client->callback_error(client, EVENT_ERROR, NULL, 0);
+			client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 			return 4;
 		}
 		client->sd = sd;
@@ -230,7 +231,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port) {
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
 			close(sd);
-			client->callback_error(client, EVENT_ERROR, NULL, 0);
+			client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 			return 5;
 		}
 
@@ -248,7 +249,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port) {
 			ev_timer_stop(client->loop, &client->timeout_watcher);
 			ev_io_stop(client->loop, &client->connect_watcher);
 			close(sd);
-			client->callback_error(client, EVENT_ERROR, NULL, 0);
+			client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 			return 6;
 		}
 

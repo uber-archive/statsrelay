@@ -38,13 +38,14 @@ static const char *tcpclient_state_name[] = {
 // EVENT_SENT data = pointer to buffer passed to tcpclient_sendall
 // EVENT_RECV data = received data (must be free'd manually)
 // EVENT_ERROR data = string describing the error
-typedef int (*tcpclient_callback)(void *, enum tcpclient_event, char *, size_t);
+typedef int (*tcpclient_callback)(void *, enum tcpclient_event, void *, char *, size_t);
 
 typedef struct tcpclient_t {
     tcpclient_callback callback_connect;
     tcpclient_callback callback_sent;
     tcpclient_callback callback_recv;
     tcpclient_callback callback_error;
+	void *callback_context;
 
     struct ev_loop *loop;
     ev_timer timeout_watcher;
@@ -61,7 +62,8 @@ typedef struct tcpclient_t {
 } tcpclient_t;
 
 int tcpclient_init(tcpclient_t *client,
-		struct ev_loop *loop);
+		struct ev_loop *loop,
+		void *callback_connect);
 
 void tcpclient_set_connect_callback(tcpclient_t *client,
 		tcpclient_callback *callback);
