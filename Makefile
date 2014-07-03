@@ -1,3 +1,4 @@
+DESTDIR:=/usr/local
 
 CFLAGS=-O0 -g -Wall -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
 #CFLAGS=-O2 -Wall -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
@@ -18,3 +19,6 @@ all: $(OBJS)
 
 clean:
 	rm -f *.o statsrelay
+
+install:
+	install -m 0755 statsrelay $(DESTDIR)/bin
