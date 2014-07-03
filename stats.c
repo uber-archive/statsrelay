@@ -81,11 +81,30 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 	return server;
 }
 
+void stats_kill_backend(stats_server_t *server, stats_backend_t *backend) {
+	stats_log("stats: Killing backend %s", backend->key);
+	free(backend->key);
+	tcpclient_destroy(&backend->client, 1);
+}
+
+void stats_kill_all_backends(stats_server_t *server) {
+	GHashTableIter iter;
+	gpointer key, value;
+
+	g_hash_table_iter_init(&iter, server->backends);
+	while(g_hash_table_iter_next(&iter, &key, &value)) {
+		stats_kill_backend(server, value);
+		free(value);
+		g_hash_table_iter_remove(&iter);
+	}
+}
+
 void stats_server_reload(stats_server_t *server) {
 	if(ketama_roll(&server->kc, server->ketama_filename) == 0) {
 		stats_log(ketama_error());
 		stats_log("stats: Unable to reload ketama config from %s", server->ketama_filename);
 	}
+	stats_kill_all_backends(server);
 	stats_log("stats: Reloaded from %s", server->ketama_filename);
 	server->last_reload = time(NULL);
 }
@@ -178,12 +197,6 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 	}
 
 	return backend;
-}
-
-void stats_kill_backend(stats_server_t *server, stats_backend_t *backend) {
-	stats_log("stats: Killing backend %s", backend->key);
-	free(backend->key);
-	tcpclient_destroy(&backend->client, 1);
 }
 
 int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
@@ -319,7 +332,7 @@ int stats_process_lines(stats_session_t *session) {
 
 		len = tail - head;
 
-		if(memcmp(head, "status\n", 7) == 0) {
+		if(len >= 6 && memcmp(head, "status\n", 7) == 0) {
 			stats_send_statistics(session);
 		}else{
 			stats_relay_line(head, len, session->server);
@@ -408,15 +421,7 @@ int stats_udp_recv(int sd, void *data) {
 }
 
 void stats_server_destroy(stats_server_t *server) {
-	GHashTableIter iter;
-	gpointer key, value;
-
-	g_hash_table_iter_init(&iter, server->backends);
-	while(g_hash_table_iter_next(&iter, &key, &value)) {
-		stats_kill_backend(server, value);
-		free(value);
-		g_hash_table_iter_remove(&iter);
-	}
+	stats_kill_all_backends(server);
 	g_hash_table_destroy(server->backends);
 
 	ketama_smoke(server->kc);

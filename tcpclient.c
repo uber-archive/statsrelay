@@ -158,7 +158,7 @@ void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int events
 	getsockopt(client->sd, SOL_SOCKET, SO_ERROR, &err, &len);
 
 	if((events & EV_ERROR) || err) {
-		stats_log("tcpclient: Connect failed");
+		stats_log("tcpclient: Connect failed: %s", strerror(err));
 		close(client->sd);
 		client->last_error = time(NULL);
 		tcpclient_set_state(client, STATE_BACKOFF);
