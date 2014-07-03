@@ -79,7 +79,6 @@ void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int event
 	ssize_t len;
 	char *buf;
 
-	stats_log("EV_READ");
 	if(!(events & EV_READ)) {
 		return;
 	}
@@ -265,6 +264,11 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 		// Does nothing if we're already connected, triggers a reconnect if backoff
 		// has expired.
 		tcpclient_connect(client, NULL, NULL);
+	}
+
+	if(buffer_datacount(&client->send_queue) > TCPCLIENT_SEND_QUEUE) {
+		stats_log("tcpclient: Send queue is full, dropping data");
+		return 2;
 	}
 
 	while(buffer_spacecount(&client->send_queue) < len) {

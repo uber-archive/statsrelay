@@ -42,7 +42,8 @@ union semun
 {
     int val;              /* used for SETVAL only */
     struct semid_ds *buf; /* for IPC_STAT and IPC_SET */
-    ushort *array;        /* used for GETALL and SETALL */
+    unsigned short *array;        /* used for GETALL and SETALL */
+	struct seminfo *__buf;
 };
 #endif
 
