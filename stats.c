@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -16,11 +17,17 @@
 #include "stats.h"
 #include "log.h"
 
+enum backend_state {
+	STATE_INIT = 0,
+	STATE_CONNECTING,
+	STATE_CONNECTED,
+	STATE_BACKOFF
+};
+
 struct stats_server_t {
 	char *ketama_filename;
 	ketama_continuum kc;
 	GHashTable *backends;
-	GHashTable *backoff_timers;
 };
 
 typedef struct {
@@ -32,12 +39,10 @@ typedef struct {
 	struct addrinfo *addr;
 	char *key;
 	int sd;
-} stats_backend_t;
-
-typedef struct {
+	enum backend_state state;
 	time_t last_kill;
 	int retry_count;
-} stats_backoff_timer_t;
+} stats_backend_t;
 
 
 stats_server_t *stats_server_create(char *filename) {
@@ -51,7 +56,6 @@ stats_server_t *stats_server_create(char *filename) {
 	}
 
 	server->backends = g_hash_table_new(g_str_hash, g_str_equal);
-	server->backoff_timers = g_hash_table_new(g_str_hash, g_str_equal);
 
 	server->ketama_filename = filename;
 	if(ketama_roll(&server->kc, filename) == 0) {
@@ -95,7 +99,6 @@ void *stats_connection(int sd, void *ctx) {
 
 stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iplen) {
 	stats_backend_t *backend;
-	stats_backoff_timer_t *backoff;
 	struct addrinfo hints;
 	struct addrinfo *addr;
 	struct linger;
@@ -105,47 +108,46 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 
 	backend = g_hash_table_lookup(server->backends, ip);
 	if(backend == NULL) {
-		backoff = g_hash_table_lookup(server->backoff_timers, ip);
-		if(backoff == NULL) {
-			backoff = malloc(sizeof(stats_backoff_timer_t));
-			if(backoff == NULL) {
-				stats_log("stats: Cannot allocate memory for backend connection");
-				return NULL;
-			}
-
-			backoff->last_kill = 0;
-			backoff->retry_count = 0;
-			g_hash_table_insert(server->backoff_timers, ip, backoff);
-		}else{
-			if((time(NULL) - backoff->last_kill) < BACKEND_RETRY_TIMEOUT) {
-				return NULL;
-			}
-			backoff->retry_count++;
-			stats_log("stats: Retrying connection to backend %s #%i", ip, backoff->retry_count);
-		}
-
 		backend = malloc(sizeof(stats_backend_t));
 		if(backend == NULL) {
 			stats_log("stats: Cannot allocate memory for backend connection");
-			backoff->last_kill = time(NULL);
 			return NULL;
 		}
+		backend->state = STATE_INIT;
+		backend->last_kill = 0;
+		backend->retry_count = 0;
 
+		g_hash_table_insert(server->backends, ip, backend);
+	}
+
+	if(backend->state == STATE_CONNECTED) {
+		return backend;
+	}
+
+	if(backend->state == STATE_BACKOFF) {
+		if((time(NULL) - backend->last_kill) < BACKEND_RETRY_TIMEOUT) {
+			// retry timeout hasn't expired yet
+			return NULL;
+		}else{
+			backend->state = STATE_INIT;
+		}
+	}
+
+	if(backend->state == STATE_INIT) {
 		// Make a copy of the address because it's immutableish
 		address = malloc(iplen);
 		if(address == NULL) {
-			stats_log("stats: Cannot allocate memory for backend address");
-			backoff->last_kill = time(NULL);
-			free(backend);
+			stats_log("stats: Unable to allocate memory for backend address");
 			return NULL;
 		}
 		memcpy(address, ip, iplen);
+		backend->key = address;
 
 		port = memchr(address, ':', iplen);
 		if(port == NULL) {
 			stats_log("stats: Unable to parse server address from config: %s", ip);
-			backoff->last_kill = time(NULL);
-			free(backend);
+			backend->last_kill = time(NULL);
+			backend->state = STATE_BACKOFF;
 			free(address);
 			return NULL;
 		}
@@ -158,63 +160,64 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		hints.ai_flags = AI_PASSIVE;		// fill in my IP for me
 		if(getaddrinfo(address, port, &hints, &addr) != 0) {
 			stats_log("stats: Error resolving backend %s: %s", address, gai_strerror(errno));
-			backoff->last_kill = time(NULL);
-			free(backend);
+			backend->last_kill = time(NULL);
+			backend->state = STATE_BACKOFF;
 			free(address);
 			return NULL;
 		}
-		
+			
 		port--;
 		port[0] = ':';
 
 		sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
 		if(sd == -1) {
 			stats_log("stats: Unable to open backend socket: %s", strerror(errno));
-			backoff->last_kill = time(NULL);
+			backend->last_kill = time(NULL);
+			backend->state = STATE_BACKOFF;
 			freeaddrinfo(addr);
-			free(backend);
 			free(address);
 			return NULL;
 		}
 
-		if(connect(sd, addr->ai_addr, addr->ai_addrlen) != 0) {
-			stats_log("stats: Unable to connect to %s: %s", address, strerror(errno));
-			backoff->last_kill = time(NULL);
+		if(fcntl(sd, F_SETFL, (fcntl(sd, F_GETFL) | O_NONBLOCK)) != 0) {
+			stats_log("stats: Unable to set backend socket to non-blocking: %s", strerror(errno));
+			backend->last_kill = time(NULL);
+			backend->state = STATE_BACKOFF;
 			close(sd);
 			freeaddrinfo(addr);
-			free(backend);
 			free(address);
 			return NULL;
 		}
 
-		backend->key = address;
+		backend->state = STATE_CONNECTING;
 		backend->addr = addr;
 		backend->sd = sd;
-		g_hash_table_insert(server->backends, backend->key, backend);
+
+		if(connect(sd, addr->ai_addr, addr->ai_addrlen) != 0 && errno != EINPROGRESS) {
+			stats_log("stats: Unable to connect to %s: %s", address, strerror(errno));
+			backend->last_kill = time(NULL);
+			backend->state = STATE_BACKOFF;
+			close(sd);
+			freeaddrinfo(addr);
+			free(address);
+			return NULL;
+		}
+
+		backend->state = STATE_CONNECTED;
 		stats_log("stats: Connected to backend %s", backend->key);
+		return backend;
 	}
+
 	return backend;
 }
 
-void stats_kill_backend(stats_server_t *server, stats_backend_t *backend, int remove_from_hash) {
-	stats_backoff_timer_t *backoff;
-
+void stats_kill_backend(stats_server_t *server, stats_backend_t *backend) {
 	stats_log("stats: Killing backend %s", backend->key);
-	if(remove_from_hash) {
-		if(!g_hash_table_remove(server->backends, backend->key)) {
-			stats_log("stats: Backend %s could not be removed from backends list! This will probably leak memory, cause a double-free, kill your loved ones and crash.", backend->key);
-		}
-	}
+	backend->state = STATE_BACKOFF;
 
-	backoff = g_hash_table_lookup(server->backoff_timers, backend->key);
-	if(backoff != NULL) {
-		backoff->last_kill = time(NULL);
-	}
-	
 	shutdown(backend->sd, SHUT_RDWR);
 	free(backend->key);
 	freeaddrinfo(backend->addr);
-	free(backend);
 }
 
 int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
@@ -247,7 +250,7 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 	sent = send(backend->sd, line, len, 0);
 	if(sent == -1) {
 		stats_log("stats: Error sending line: %s", strerror(errno));
-		stats_kill_backend(ss, backend, 1);
+		stats_kill_backend(ss, backend);
 		return 1;
 	}
 	if(sent != len) {
@@ -356,7 +359,8 @@ void stats_server_destroy(stats_server_t *server) {
 
 	g_hash_table_iter_init(&iter, server->backends);
 	while(g_hash_table_iter_next(&iter, &key, &value)) {
-		stats_kill_backend(server, value, 0);
+		stats_kill_backend(server, value);
+		free(value);
 		g_hash_table_iter_remove(&iter);
 	}
 	g_hash_table_destroy(server->backends);
