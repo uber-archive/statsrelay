@@ -13,6 +13,7 @@ Copyright (c) 2007-2014 Richard Jones <rj@metabrew.com>
 # Build
 
 Dependencies:
+- pkg-config
 - libev (>= 4.11)
 - glib (>= 2.32)
 

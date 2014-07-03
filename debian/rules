@@ -11,3 +11,6 @@
 
 %:
 	dh $@ 
+
+override_dh_auto_install:
+	make DESTDIR=$(CURDIR)/debian/statsrelay PREFIX=/usr install
