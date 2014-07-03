@@ -48,7 +48,8 @@ typedef struct tcpclient_t {
     struct ev_loop *loop;
     ev_timer timeout_watcher;
     ev_io connect_watcher;
-    ev_io io_watcher;
+    ev_io read_watcher;
+    ev_io write_watcher;
 
 	struct addrinfo *addr;
     buffer_t send_queue;

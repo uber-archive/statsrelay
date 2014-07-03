@@ -74,49 +74,62 @@ void tcpclient_set_error_callback(tcpclient_t *client, tcpclient_callback *callb
 	client->callback_error = *callback;
 }
 
-void tcpclient_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
+void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
 	tcpclient_t *client = (tcpclient_t *)watcher->data;
 	ssize_t len;
 	char *buf;
 
-	if(events & EV_READ) {
-		buf = malloc(TCPCLIENT_RECV_BUFFER);
-		len = recv(client->sd, buf, TCPCLIENT_RECV_BUFFER, 0);
-		if(len < 0) {
-			stats_log("tcpclient: Error from recv: %s", strerror(errno));
-			ev_io_stop(client->loop, &client->io_watcher);
-			close(client->sd);
-			free(buf);
-			tcpclient_set_state(client, STATE_BACKOFF);
-			client->last_error = time(NULL);
-			client->callback_error(client, EVENT_ERROR, NULL, 0);
-			return;
-		}
-
-		if(len == 0) {
-			stats_log("tcpclient: Server closed connection");
-			ev_io_stop(client->loop, &client->io_watcher);
-			close(client->sd);
-			free(buf);
-			tcpclient_set_state(client, STATE_BACKOFF);
-			client->last_error = time(NULL);
-			client->callback_error(client, EVENT_ERROR, NULL, 0);
-			return;
-		}
-		client->callback_recv(client, EVENT_RECV, buf, len);
+	stats_log("EV_READ");
+	if(!(events & EV_READ)) {
 		return;
 	}
 
-	if((events & EV_WRITE) && buffer_datacount(&client->send_queue) > 0) {
+	buf = malloc(TCPCLIENT_RECV_BUFFER);
+	len = recv(client->sd, buf, TCPCLIENT_RECV_BUFFER, 0);
+	if(len < 0) {
+		stats_log("tcpclient: Error from recv: %s", strerror(errno));
+		ev_io_stop(client->loop, &client->read_watcher);
+		ev_io_stop(client->loop, &client->write_watcher);
+		close(client->sd);
+		free(buf);
+		tcpclient_set_state(client, STATE_BACKOFF);
+		client->last_error = time(NULL);
+		client->callback_error(client, EVENT_ERROR, NULL, 0);
+		return;
+	}
+
+	if(len == 0) {
+		stats_log("tcpclient: Server closed connection");
+		ev_io_stop(client->loop, &client->read_watcher);
+		ev_io_stop(client->loop, &client->write_watcher);
+		close(client->sd);
+		free(buf);
+		tcpclient_set_state(client, STATE_BACKOFF);
+		client->last_error = time(NULL);
+		client->callback_error(client, EVENT_ERROR, NULL, 0);
+		return;
+	}
+	client->callback_recv(client, EVENT_RECV, buf, len);
+}
+
+
+void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
+	tcpclient_t *client = (tcpclient_t *)watcher->data;
+	ssize_t len;
+
+	if(!(events & EV_WRITE)) {
+		return;
+	}
+
+	if(buffer_datacount(&client->send_queue) > 0) {
 		len = send(client->sd, buffer_head(&client->send_queue), buffer_datacount(&client->send_queue), 0);
 		if(len < 0) {
 			stats_log("tcpclient: Error from send: %s", strerror(errno));
-			ev_io_stop(client->loop, &client->io_watcher);
+			ev_io_stop(client->loop, &client->write_watcher);
+			ev_io_stop(client->loop, &client->read_watcher);
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
 			close(client->sd);
-			buffer_consume(&client->send_queue, buffer_datacount(&client->send_queue));
-			buffer_realign(&client->send_queue);
 			client->callback_error(client, EVENT_ERROR, NULL, 0);
 			return;
 		}
@@ -124,12 +137,8 @@ void tcpclient_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
 		client->callback_sent(client, EVENT_SENT, (char *)buffer_head(&client->send_queue), (size_t)len);
 		buffer_consume(&client->send_queue, len);
 		buffer_realign(&client->send_queue);
-	}
-
-	if(buffer_datacount(&client->send_queue) == 0) {
-		ev_io_stop(client->loop, &client->io_watcher);
-		ev_io_set(&client->io_watcher, client->sd, EV_READ);
-		ev_io_start(client->loop, &client->io_watcher);
+	}else{
+		ev_io_stop(client->loop, &client->write_watcher);
 	}
 }
 
@@ -155,9 +164,12 @@ void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int events
 	tcpclient_set_state(client, STATE_CONNECTED);
 
 	// Setup events for recv
-	client->io_watcher.data = client;
-	ev_io_init(&client->io_watcher, tcpclient_event, client->sd, (EV_READ | EV_WRITE));
-	ev_io_start(client->loop, &client->io_watcher);
+	client->read_watcher.data = client;
+	client->write_watcher.data = client;
+	ev_io_init(&client->read_watcher, tcpclient_read_event, client->sd, EV_READ);
+	ev_io_init(&client->write_watcher, tcpclient_write_event, client->sd, EV_WRITE);
+	ev_io_start(client->loop, &client->read_watcher);
+	ev_io_start(client->loop, &client->write_watcher);
 
 	client->callback_connect(client, EVENT_CONNECTED, NULL, 0);
 }
@@ -201,13 +213,14 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port) {
 			addr = client->addr;
 		}
 
-		if((sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol)) == -1) {
+		if((sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol)) < 0) {
 			stats_log("tcpclient: Unable to create socket: %s", strerror(errno));
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
 			client->callback_error(client, EVENT_ERROR, NULL, 0);
 			return 4;
 		}
+		client->sd = sd;
 
 		if(fcntl(sd, F_SETFL, (fcntl(sd, F_GETFL) | O_NONBLOCK)) != 0) {
 			stats_log("tcpclient: Unable to set socket to non-blocking: %s" , strerror(errno));
@@ -237,7 +250,6 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port) {
 		}
 
 		tcpclient_set_state(client, STATE_CONNECTING);
-		client->sd = sd;
 		return 0;
 	}
 
@@ -261,9 +273,9 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 	memcpy(buffer_tail(&client->send_queue), buf, len);
 	buffer_produced(&client->send_queue, len);
 
-	ev_io_stop(client->loop, &client->io_watcher);
-	ev_io_set(&client->io_watcher, client->sd, (EV_READ | EV_WRITE));
-	ev_io_start(client->loop, &client->io_watcher);
+	if(client->state == STATE_CONNECTED) {
+		ev_io_start(client->loop, &client->write_watcher);
+	}
 	return 0;
 }
 
