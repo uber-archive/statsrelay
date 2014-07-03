@@ -59,20 +59,20 @@ int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_con
 	return 0;
 }
 
-void tcpclient_set_connect_callback(tcpclient_t *client, tcpclient_callback *callback) {
-	client->callback_connect = *callback;
+void tcpclient_set_connect_callback(tcpclient_t *client, tcpclient_callback callback) {
+	client->callback_connect = callback;
 }
 
-void tcpclient_set_sent_callback(tcpclient_t *client, tcpclient_callback *callback) {
-	client->callback_sent = *callback;
+void tcpclient_set_sent_callback(tcpclient_t *client, tcpclient_callback callback) {
+	client->callback_sent = callback;
 }
 
-void tcpclient_set_recv_callback(tcpclient_t *client, tcpclient_callback *callback) {
-	client->callback_recv = *callback;
+void tcpclient_set_recv_callback(tcpclient_t *client, tcpclient_callback callback) {
+	client->callback_recv = callback;
 }
 
-void tcpclient_set_error_callback(tcpclient_t *client, tcpclient_callback *callback) {
-	client->callback_error = *callback;
+void tcpclient_set_error_callback(tcpclient_t *client, tcpclient_callback callback) {
+	client->callback_error = callback;
 }
 
 void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int events) {

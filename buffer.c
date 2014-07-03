@@ -125,7 +125,9 @@ int buffer_set(buffer_t *b, const char *data, size_t size)
 
 int buffer_realign(buffer_t *b)
 {
-    memmove(b->ptr, b->head, b->tail - b->head);
+    if(b->tail != b->head) {
+        memmove(b->ptr, b->head, b->tail - b->head);
+    }
     /* do not switch the order of the following two statements */
     b->tail = b->ptr + (b->tail - b->head);
     b->head = b->ptr;

@@ -113,9 +113,10 @@ void *stats_connection(int sd, void *ctx) {
 	return (void *)session;
 }
 
-void stats_sent(void *tcpclient, enum tcpclient_event event, void *context, char *data, size_t len) {
+int stats_sent(void *tcpclient, enum tcpclient_event event, void *context, char *data, size_t len) {
 	stats_backend_t *backend = (stats_backend_t *)context;
 	backend->bytes_sent += len;
+	return 0;
 }
 
 stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iplen) {
@@ -137,11 +138,12 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		backend->relayed_lines = 0;
 		backend->dropped_lines = 0;
 
-		if(tcpclient_init(&backend->client, server->loop, (void *)&backend) != 0) {
+		if(tcpclient_init(&backend->client, server->loop, (void *)backend) != 0) {
 			stats_log("stats: Unable to initialize tcpclient");
 			free(backend);
 			return NULL;
 		};
+		tcpclient_set_sent_callback(&backend->client, stats_sent);
 		g_hash_table_insert(server->backends, ip, backend);
 
 		// Make a copy of the address because it's immutableish
@@ -283,6 +285,9 @@ void stats_send_statistics(stats_session_t *session) {
 			backend->key, backend->dropped_lines));
 	}
 
+	buffer_produced(response,
+		snprintf((char *)buffer_tail(response), buffer_spacecount(response), "\n"));
+
 	while(buffer_datacount(response) > 0) {
 		bytes_sent = send(session->sd, buffer_head(response), buffer_datacount(response), 0);
 		if(bytes_sent < 0) {
@@ -314,7 +319,7 @@ int stats_process_lines(stats_session_t *session) {
 
 		len = tail - head;
 
-		if(memcmp(head, "status", len) == 0) {
+		if(memcmp(head, "status\n", 7) == 0) {
 			stats_send_statistics(session);
 		}else{
 			stats_relay_line(head, len, session->server);
