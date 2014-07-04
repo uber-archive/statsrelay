@@ -1,13 +1,13 @@
-statsrelay
+# statsrelay
 A consistent-hashing relay for statsd metrics
 
 # License
-MIT License
+MIT License  
 Copyright (c) 2014 Uber Technologies, Inc.
 
-libketama
-BSD License
-Copyright (c) 2007 Last.fm
+libketama  
+BSD License  
+Copyright (c) 2007 Last.fm  
 Copyright (c) 2007-2014 Richard Jones <rj@metabrew.com>
 
 # Build
