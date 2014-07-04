@@ -47,6 +47,7 @@ int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_con
 	client->loop = loop;
 	client->sd = -1;
 	client->addr = NULL;
+	client->last_error = 0;
 
 	client->callback_connect = &tcpclient_default_callback;
 	client->callback_sent = &tcpclient_default_callback;
@@ -292,6 +293,11 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 }
 
 void tcpclient_destroy(tcpclient_t *client, int drop_queue) {
+	ev_timer_stop(client->loop, &client->timeout_watcher);
+	ev_io_stop(client->loop, &client->connect_watcher);
+	ev_io_stop(client->loop, &client->read_watcher);
+	ev_io_stop(client->loop, &client->write_watcher);
+
 	buffer_destroy(&client->send_queue);
 	if(client->addr != NULL) {
 		freeaddrinfo(client->addr);
