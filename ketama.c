@@ -27,7 +27,8 @@
 */
 
 #include "ketama.h"
-#include "md5.h"
+
+#include <openssl/md5.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -192,13 +193,13 @@ ketama_sem_init( key_t key )
 
 /* ketama.h does not expose this function */
 void
-ketama_md5_digest( char* inString, unsigned char md5pword[16] )
+ketama_md5_digest( char* inString, unsigned char md5pword[MD5_DIGEST_LENGTH] )
 {
-    md5_state_t md5state;
+    MD5_CTX c;
 
-    md5_init( &md5state );
-    md5_append( &md5state, (unsigned char *)inString, strlen( inString ) );
-    md5_finish( &md5state, md5pword );
+    MD5_Init( &c );
+    MD5_Update( &c, (void *)inString, strlen( inString ) );
+    MD5_Final( md5pword, &c );
 }
 
 
@@ -335,7 +336,7 @@ read_server_definitions( char* filename, unsigned int* count, unsigned long* mem
 unsigned int
 ketama_hashi( char* inString )
 {
-    unsigned char digest[16];
+    unsigned char digest[MD5_DIGEST_LENGTH];
 
     ketama_md5_digest( inString, digest );
     return (unsigned int)(( digest[3] << 24 )
