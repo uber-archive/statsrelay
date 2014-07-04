@@ -18,7 +18,7 @@ Dependencies:
 - glib (>= 2.32)
 
 ```
-apt-get install libev-dev libglib2.0-dev
+apt-get install pkg-config libev-dev libglib2.0-dev
 make clean
 make
 make install
