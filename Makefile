@@ -2,8 +2,8 @@ DESTDIR:=
 PREFIX := /usr/local
 bindir:=/bin
 
-CFLAGS=-O0 -g -Wall -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
-#CFLAGS=-O2 -Wall -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
+#CFLAGS=-O0 -g -Wall -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
+CFLAGS=-O2 -Wall -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
 
 LDFLAGS=-lcrypto -lev -lm
 
