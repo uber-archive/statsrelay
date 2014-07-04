@@ -2,7 +2,7 @@ Source: statsrelay
 Section: net
 Priority: extra
 Maintainer: Jeremy Grosser <jeremy@synack.me>
-Build-Depends: debhelper (>= 8.0.0), pkg-config, libev-dev (>= 4.11), libglib2.0-dev (>= 2.32.4)
+Build-Depends: debhelper (>= 8.0.0), pkg-config, libev-dev (>= 4.11), libglib2.0-dev (>= 2.32.4), libssl-dev
 Standards-Version: 3.9.3
 
 Package: statsrelay

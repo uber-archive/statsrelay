@@ -14,11 +14,12 @@ Copyright (c) 2007-2014 Richard Jones <rj@metabrew.com>
 
 Dependencies:
 - pkg-config
+- libssl (>= 1.0.1e)
 - libev (>= 4.11)
 - glib (>= 2.32)
 
 ```
-apt-get install pkg-config libev-dev libglib2.0-dev
+apt-get install pkg-config libev-dev libglib2.0-dev libssl-dev
 make clean
 make
 make install

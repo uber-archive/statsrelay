@@ -1,3 +1,9 @@
+statsrelay (1.0.1) unstable; urgency=low
+
+  * Use OpenSSL's MD5 implementation
+
+ -- Jeremy Grosser <jeremy@synack.me>  Fri, 04 Jul 2014 01:47:05 -0700
+
 statsrelay (1.0.0) unstable; urgency=low
 
   * Initial release (Closes: T14501)
