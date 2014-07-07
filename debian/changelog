@@ -1,3 +1,9 @@
+statsrelay (1.0.3) unstable; urgency=low
+
+  * Strip extra newline from UDP payloads
+
+ -- Jeremy Grosser <jeremy@synack.me>  Mon, 07 Jul 2014 11:54:55 -0700
+
 statsrelay (1.0.2) unstable; urgency=low
 
   * Fix makefile 
