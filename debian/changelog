@@ -1,3 +1,9 @@
+statsrelay (1.0.5) unstable; urgency=low
+
+  * Build with correct CFLAGS, make newline stripping more robust
+
+ -- Jeremy Grosser <jeremy@synack.me>  Mon, 07 Jul 2014 14:08:12 -0700
+
 statsrelay (1.0.4) unstable; urgency=low
 
   * Input validation
