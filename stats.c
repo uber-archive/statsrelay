@@ -50,6 +50,15 @@ typedef struct {
 	uint64_t dropped_lines;
 } stats_backend_t;
 
+static char *valid_stat_types[6] = {
+	"c",
+	"ms",
+	"kv",
+	"g",
+	"h",
+	"s"
+};
+static int valid_stat_types_len = 6;
 
 stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 	stats_server_t *server;
@@ -199,6 +208,87 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 	return backend;
 }
 
+int stats_validate_line(char *line, size_t len) {
+	char *start, *end;
+	char *err;
+	size_t plen;
+	char c;
+	int i, valid;
+
+	start = line;
+	plen = len;
+	end = memchr(start, ':', plen);
+	if(end == NULL) {
+		stats_log("stats: Invalid line \"%s\" missing ':'", line);
+		return 1;
+	}
+
+	if((end - start) < 1) {
+		stats_log("stats: Invalid line \"%s\" zero length key", line);
+		return 2;
+	}
+	
+	start = end + 1;
+	plen = len - (start - line);
+
+	c = end[0];
+	end[0] = '\0';
+	if((strtod(start, &err) == 0.0) && (err == start)) {
+		end[0] = c;
+		stats_log("stats: Invalid line \"%s\" unable to parse value as double", line);
+		return 3;
+	}
+	end[0] = c;
+
+	end = memchr(start, '|', plen);
+	if(end == NULL) {
+		stats_log("stats: Invalid line \"%s\" missing '|'", line);
+		return 4;
+	}
+
+	start = end + 1;
+	plen = len - (start - line);
+
+	end = memchr(start, '@', plen);
+	if(end != NULL) {
+		c = end[0];
+		end[0] = '\0';
+		plen = end - start;
+	}
+
+	valid = 0;
+	for(i = 0; i < valid_stat_types_len; i++) {
+		if(strlen(valid_stat_types[i]) != plen) {
+			continue;
+		}
+		if(strncmp(start, valid_stat_types[i], plen) == 0) {
+			valid = 1;
+			break;
+		}
+	}
+
+	if(end != NULL) {
+		end[0] = c;
+		start = end + 1;
+		plen = len - (start - line);
+		if(plen == 0) {
+			stats_log("stats: Invalid line \"%s\" @ sample with no rate", line);
+			return 5;
+		}
+		if((strtod(start, &err) == 0.0) && err == start) {
+			stats_log("stats: Invalid line \"%s\" invalid sample rate", line);
+			return 6;
+		}
+	}
+
+	if(valid == 0) {
+		stats_log("stats: Invalid line \"%s\" unknown stat type \"%s\"", line, start);
+		return 7;
+	}
+
+	return 0;
+}
+
 int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 	stats_backend_t *backend;
 
@@ -208,6 +298,10 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 
 	line[len] = '\0';
 
+	if(stats_validate_line(line, len) != 0) {
+		return 1;
+	}
+
 	keyend = memchr(line, ':', len);
 	if(keyend == NULL) {
 		ss->malformed_lines++;
@@ -215,7 +309,7 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 		return 1;
 	}
 	//keylen = keyend - line;
-
+	
 	keyend[0] = '\0';
 	server = ketama_get_server(line, ss->kc);
 	keyend[0] = ':';
