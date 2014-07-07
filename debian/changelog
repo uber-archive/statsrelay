@@ -1,3 +1,9 @@
+statsrelay (1.0.2) unstable; urgency=low
+
+  * Fix makefile 
+
+ -- Jeremy Grosser <jeremy@synack.me>  Mon, 07 Jul 2014 11:25:27 -0700
+
 statsrelay (1.0.1) unstable; urgency=low
 
   * Use OpenSSL's MD5 implementation
