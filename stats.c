@@ -507,8 +507,10 @@ int stats_udp_recv(int sd, void *data) {
 
 	ss->bytes_recv_udp += bytes_read;
 
-	// Strip extra newline
-	bytes_read--;
+	// Strip extra newlines
+	while(buffer[bytes_read-1] == '\n') {
+		bytes_read--;
+	}
 	buffer[bytes_read] = '\0';
 
 	if(stats_relay_line(buffer, bytes_read, ss) != 0) {
