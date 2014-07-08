@@ -3,6 +3,7 @@
 
 #define MAX_LOG_SIZE 4096
 
+void stats_log_verbose(int verbose);
 void stats_log(const char *format, ...);
 
 #endif

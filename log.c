@@ -4,6 +4,12 @@
 #include <stdio.h>
 #include <syslog.h>
 
+int g_verbose = 1;
+
+void stats_log_verbose(int verbose) {
+	g_verbose = verbose;
+}
+
 void stats_log(const char *format, ...) {
 	va_list args;
 	char buffer[MAX_LOG_SIZE];
@@ -12,10 +18,12 @@ void stats_log(const char *format, ...) {
 	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
-	va_start(args, format);
-	vfprintf(stderr, format, args);
-	va_end(args);
-	fprintf(stderr, "\n");
+	if(g_verbose == 1) {
+		va_start(args, format);
+		vfprintf(stderr, format, args);
+		va_end(args);
+		fprintf(stderr, "\n");
+	}
 
 	va_start(args, format);
 	vsyslog(LOG_INFO, format, args);
