@@ -33,6 +33,9 @@ unsigned char *buffer_tail(buffer_t *);
 // Doubles the size of the buffer
 int buffer_expand(buffer_t *);
 
+// Expands the buffer to the given size
+int buffer_newsize(buffer_t *b, size_t newsize);
+
 // Advances head
 int buffer_consume(buffer_t *, size_t);
 

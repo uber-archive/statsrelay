@@ -25,6 +25,7 @@ struct stats_server_t {
 	char *ketama_filename;
 	ketama_continuum kc;
 	GHashTable *backends;
+	GHashTable *ketama_cache;
 	struct ev_loop *loop;
 
 	uint64_t bytes_recv_udp;
@@ -72,6 +73,7 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 
 	server->loop = loop;
 	server->backends = g_hash_table_new(g_str_hash, g_str_equal);
+	server->ketama_cache = g_hash_table_new(g_str_hash, g_str_equal);
 
 	server->ketama_filename = filename;
 	if(ketama_roll(&server->kc, filename) == 0) {
@@ -114,6 +116,7 @@ void stats_server_reload(stats_server_t *server) {
 		stats_log("stats: Unable to reload ketama config from %s", server->ketama_filename);
 	}
 	stats_kill_all_backends(server);
+	g_hash_table_remove_all(server->ketama_cache);
 	stats_log("stats: Reloaded from %s", server->ketama_filename);
 	server->last_reload = time(NULL);
 }
@@ -147,11 +150,24 @@ int stats_sent(void *tcpclient, enum tcpclient_event event, void *context, char 
 	return 0;
 }
 
-stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iplen) {
+stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t keylen) {
 	stats_backend_t *backend;
 	char *address;
 	char *port;
 	int ret;
+
+	size_t iplen;
+	char *ip;
+	mcs *ks;
+
+	backend = g_hash_table_lookup(server->ketama_cache, key);
+	if(backend != NULL) {
+		return backend;
+	}
+
+	ks = ketama_get_server(key, server->kc);
+	ip = ks->ip;
+	iplen = sizeof(ks->ip);
 
 	backend = g_hash_table_lookup(server->backends, ip);
 	if(backend == NULL) {
@@ -202,9 +218,11 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *ip, size_t iple
 		port--;
 		port[0] = ':';
 
+		g_hash_table_insert(server->ketama_cache, key, backend);
 		return backend;
 	}
 
+	g_hash_table_insert(server->ketama_cache, key, backend);
 	return backend;
 }
 
@@ -291,10 +309,7 @@ int stats_validate_line(char *line, size_t len) {
 
 int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 	stats_backend_t *backend;
-
 	char *keyend;
-	//size_t keylen;
-	mcs *server;
 
 	line[len] = '\0';
 
@@ -311,11 +326,10 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 	//keylen = keyend - line;
 	
 	keyend[0] = '\0';
-	server = ketama_get_server(line, ss->kc);
+	backend = stats_get_backend(ss, line, (keyend - line));
 	keyend[0] = ':';
 	line[len] = '\n';
 
-	backend = stats_get_backend(ss, server->ip, sizeof(server->ip));
 	if(backend == NULL) {
 		backend->dropped_lines++;
 		return 1;
@@ -522,6 +536,7 @@ int stats_udp_recv(int sd, void *data) {
 
 void stats_server_destroy(stats_server_t *server) {
 	stats_kill_all_backends(server);
+	g_hash_table_destroy(server->ketama_cache);
 	g_hash_table_destroy(server->backends);
 
 	ketama_smoke(server->kc);

@@ -55,6 +55,7 @@ int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_con
 	client->callback_error = &tcpclient_default_callback;
 	client->callback_context = callback_context;
 	buffer_init(&client->send_queue);
+	buffer_newsize(&client->send_queue, 33554432);	// Use a larger buffer so that we realign less often
 	ev_timer_init(&client->timeout_watcher, tcpclient_connect_timeout, TCPCLIENT_CONNECT_TIMEOUT, 0);
 
 	return 0;
@@ -141,7 +142,10 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 
 		client->callback_sent(client, EVENT_SENT, client->callback_context, (char *)buffer_head(&client->send_queue), (size_t)len);
 		buffer_consume(&client->send_queue, len);
-		buffer_realign(&client->send_queue);
+		if(buffer_spacecount(&client->send_queue) < 1024) {
+			stats_log("tcpclient: Realign send queue");
+			buffer_realign(&client->send_queue);
+		}
 	}else{
 		ev_io_stop(client->loop, &client->write_watcher);
 	}
