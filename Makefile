@@ -1,6 +1,7 @@
 DESTDIR:=
 PREFIX := /usr/local
 bindir:=/bin
+sbindir:=/sbin
 
 #CFLAGS=-O0 -g -Wall -Wno-strict-aliasing -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
 CFLAGS=-O2 -Wall -fno-strict-aliasing -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE -g
@@ -23,4 +24,4 @@ clean:
 	rm -f *.o statsrelay
 
 install: statsrelay
-	install -D -m 0755 statsrelay $(DESTDIR)$(PREFIX)$(bindir)/statsrelay
+	install -D -m 0755 statsrelay $(DESTDIR)$(PREFIX)$(sbindir)/statsrelay
