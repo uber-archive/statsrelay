@@ -1,3 +1,9 @@
+statsrelay (1.0.7) unstable; urgency=low
+
+  * Add command line options for config
+
+ -- Jeremy Grosser <jeremy@synack.me>  Tue, 08 Jul 2014 14:56:35 -0700
+
 statsrelay (1.0.6) precise; urgency=low
 
   * More optimizations
