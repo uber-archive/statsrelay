@@ -39,7 +39,7 @@ void reload_config(struct ev_loop *loop, ev_signal *w, int revents) {
 }
 
 int main(int argc, char **argv) {
-	ev_signal *sigint_watcher, *sigterm_watcher, *sighup_watcher;
+	ev_signal sigint_watcher, sigterm_watcher, sighup_watcher;
 
 	if(argc < 2) {
 		stats_log("Usage: %s <config file>", argv[0]);
@@ -48,65 +48,43 @@ int main(int argc, char **argv) {
 
 	loop = ev_default_loop(0);
 
-	sigint_watcher = malloc(sizeof(ev_signal));
-	ev_signal_init(sigint_watcher, graceful_shutdown, SIGINT);
-	ev_signal_start(loop, sigint_watcher);
+	ev_signal_init(&sigint_watcher, graceful_shutdown, SIGINT);
+	ev_signal_start(loop, &sigint_watcher);
 
-	sigterm_watcher = malloc(sizeof(ev_signal));
-	ev_signal_init(sigterm_watcher, graceful_shutdown, SIGTERM);
-	ev_signal_start(loop, sigterm_watcher);
+	ev_signal_init(&sigterm_watcher, graceful_shutdown, SIGTERM);
+	ev_signal_start(loop, &sigterm_watcher);
 
-	sighup_watcher = malloc(sizeof(ev_signal));
-	ev_signal_init(sighup_watcher, reload_config, SIGHUP);
-	ev_signal_start(loop, sighup_watcher);
+	ev_signal_init(&sighup_watcher, reload_config, SIGHUP);
+	ev_signal_start(loop, &sighup_watcher);
 
 	server = stats_server_create(argv[1], loop);
 	if(server == NULL) {
-		free(sigint_watcher);
-		free(sigterm_watcher);
-		free(sighup_watcher);
 		return 2;
 	}
 
 	ts = tcpserver_create(loop, server);
 	if(ts == NULL) {
 		stats_log("Unable to create tcpserver");
-		free(sigint_watcher);
-		free(sigterm_watcher);
-		free(sighup_watcher);
 		return 3;
 	}
 
 	if(tcpserver_bind(ts, "*", "8125", stats_connection, stats_recv) != 0) {
-		free(sigint_watcher);
-		free(sigterm_watcher);
-		free(sighup_watcher);
 		return 4;
 	}
 
 	us = udpserver_create(loop, server);
 	if(us == NULL) {
 		stats_log("Unable to create udpserver");
-		free(sigint_watcher);
-		free(sigterm_watcher);
-		free(sighup_watcher);
 		return 5;
 	}
 
 	if(udpserver_bind(us, "*", "8125", stats_udp_recv) != 0) {
-		free(sigint_watcher);
-		free(sigterm_watcher);
-		free(sighup_watcher);
 		return 6;
 	}
 
 
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);
-
-	free(sigint_watcher);
-	free(sigterm_watcher);
-	free(sighup_watcher);
 
 	return 0;
 }

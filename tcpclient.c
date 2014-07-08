@@ -55,7 +55,7 @@ int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_con
 	client->callback_error = &tcpclient_default_callback;
 	client->callback_context = callback_context;
 	buffer_init(&client->send_queue);
-	buffer_newsize(&client->send_queue, 33554432);	// Use a larger buffer so that we realign less often
+	buffer_newsize(&client->send_queue, 67108864);	// Use a larger buffer so that we realign less often
 	ev_timer_init(&client->timeout_watcher, tcpclient_connect_timeout, TCPCLIENT_CONNECT_TIMEOUT, 0);
 
 	return 0;
