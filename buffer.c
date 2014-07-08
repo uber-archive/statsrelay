@@ -18,7 +18,7 @@
 int buffer_allocate(buffer_t *b, size_t size)
 {
     b->size = size;;
-    b->ptr = (unsigned char *)malloc(b->size);
+    b->ptr = (char *)malloc(b->size);
     if (!b->ptr) return -1;
     b->head = b->ptr;
     b->tail = b->ptr;
@@ -56,20 +56,20 @@ size_t buffer_spacecount(buffer_t *b)
     return b->size - (b->tail - b->ptr);
 }
 
-unsigned char *buffer_head(buffer_t *b)
+char *buffer_head(buffer_t *b)
 {
     return b->head;
 }
 
-unsigned char *buffer_tail(buffer_t *b)
+char *buffer_tail(buffer_t *b)
 {
     return b->tail;
 }
 
 /* Assumes we are always making it bigger */
-unsigned char *myrealloc(unsigned char *p, size_t old, size_t new)
+char *myrealloc(char *p, size_t old, size_t new)
 {
-    unsigned char *pnew = malloc(new);
+    char *pnew = malloc(new);
 	if(pnew == NULL) {
 		return NULL;
 	}
@@ -80,7 +80,7 @@ unsigned char *myrealloc(unsigned char *p, size_t old, size_t new)
 
 int buffer_newsize(buffer_t *b, size_t newsize)
 {
-    unsigned char *pnew = myrealloc(b->ptr, b->size, newsize);
+    char *pnew = myrealloc(b->ptr, b->size, newsize);
     if (!pnew)
         return -1;
     b->head = pnew + (b->head - b->ptr);

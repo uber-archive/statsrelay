@@ -29,10 +29,6 @@ enum tcpclient_state {
     STATE_TERMINATED
 };
 
-static const char *tcpclient_state_name[] = {
-	"INIT", "CONNECTING", "BACKOFF", "CONNECTED", "TERMINATED"
-};
-
 // data has different meaning depending on the event...
 // EVENT_CONNECTED data = NULL
 // EVENT_SENT data = pointer to buffer passed to tcpclient_sendall

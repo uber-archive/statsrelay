@@ -26,6 +26,9 @@ int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *conte
 }
 
 void tcpclient_set_state(tcpclient_t *client, enum tcpclient_state state) {
+	static const char *tcpclient_state_name[] = {
+		    "INIT", "CONNECTING", "BACKOFF", "CONNECTED", "TERMINATED"
+	};
 	stats_log("tcpclient: State transition %s -> %s",
 			tcpclient_state_name[client->state],
 			tcpclient_state_name[state]);

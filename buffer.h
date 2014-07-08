@@ -4,9 +4,9 @@
 #include <sys/types.h>
 
 struct buffer {
-    unsigned char *ptr;
-    unsigned char *head;
-    unsigned char *tail;
+    char *ptr;
+    char *head;
+    char *tail;
     size_t size;
 };
 
@@ -25,10 +25,10 @@ size_t buffer_datacount(buffer_t *);
 size_t buffer_spacecount(buffer_t *);
 
 // Returns a pointer to the beginning of used space
-unsigned char *buffer_head(buffer_t *);
+char *buffer_head(buffer_t *);
 
 // Returns a pointer to the end of used space
-unsigned char *buffer_tail(buffer_t *);
+char *buffer_tail(buffer_t *);
 
 // Doubles the size of the buffer
 int buffer_expand(buffer_t *);
