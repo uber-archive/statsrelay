@@ -313,11 +313,9 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 
 	line[len] = '\0';
 
-	/*
 	if(stats_validate_line(line, len) != 0) {
 		return 1;
 	}
-	*/
 
 	keyend = memchr(line, ':', len);
 	if(keyend == NULL) {
