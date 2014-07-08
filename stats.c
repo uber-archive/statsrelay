@@ -507,7 +507,8 @@ int stats_udp_recv(int sd, void *data) {
 	ssize_t bytes_read;
 	char buffer[MAX_UDP_LENGTH];
 
-	bytes_read = recvfrom(sd, buffer, MAX_UDP_LENGTH, 0, NULL, NULL);
+	//bytes_read = recvfrom(sd, buffer, MAX_UDP_LENGTH, 0, NULL, NULL);
+	bytes_read = read(sd, buffer, MAX_UDP_LENGTH);
 
 	if(bytes_read == 0) {
 		stats_log("stats: Got zero-length UDP payload. That's weird.");
@@ -515,6 +516,9 @@ int stats_udp_recv(int sd, void *data) {
 	}
 
 	if(bytes_read < 0) {
+		if(errno == EAGAIN) {
+			return 0;
+		}
 		stats_log("stats: Error calling recvfrom: %s", strerror(errno));
 		return 2;
 	}
