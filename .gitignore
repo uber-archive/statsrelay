@@ -1,3 +1,6 @@
 *.o
 *.swp
 statsrelay
+test/devnull
+gmon.out
+perf.*
