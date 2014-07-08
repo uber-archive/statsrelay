@@ -124,14 +124,17 @@ void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int event
 
 void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
 	tcpclient_t *client = (tcpclient_t *)watcher->data;
+	buffer_t *sendq;
 	ssize_t len;
 
 	if(!(events & EV_WRITE)) {
 		return;
 	}
 
-	if(buffer_datacount(&client->send_queue) > 0) {
-		len = send(client->sd, buffer_head(&client->send_queue), buffer_datacount(&client->send_queue), 0);
+	sendq = &client->send_queue;
+	len = buffer_datacount(sendq);
+	if(len > 0) {
+		len = send(client->sd, buffer_head(sendq), len, 0);
 		if(len < 0) {
 			stats_log("tcpclient: Error from send: %s", strerror(errno));
 			ev_io_stop(client->loop, &client->write_watcher);
@@ -143,8 +146,11 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 			return;
 		}
 
-		client->callback_sent(client, EVENT_SENT, client->callback_context, (char *)buffer_head(&client->send_queue), (size_t)len);
-		buffer_consume(&client->send_queue, len);
+		client->callback_sent(client, EVENT_SENT, client->callback_context, (char *)buffer_head(sendq), (size_t)len);
+		if(buffer_consume(sendq, len) != 0) {
+			stats_log("tcpclient: Unable to consume send queue");
+			return;
+		}
 		if(buffer_spacecount(&client->send_queue) < 1024) {
 			stats_log("tcpclient: Realign send queue");
 			buffer_realign(&client->send_queue);
