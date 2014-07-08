@@ -134,7 +134,7 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 	sendq = &client->send_queue;
 	len = buffer_datacount(sendq);
 	if(len > 0) {
-		len = send(client->sd, buffer_head(sendq), len, 0);
+		len = send(client->sd, sendq->head, len, 0);
 		if(len < 0) {
 			stats_log("tcpclient: Error from send: %s", strerror(errno));
 			ev_io_stop(client->loop, &client->write_watcher);
@@ -146,14 +146,10 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 			return;
 		}
 
-		client->callback_sent(client, EVENT_SENT, client->callback_context, (char *)buffer_head(sendq), (size_t)len);
+		client->callback_sent(client, EVENT_SENT, client->callback_context, sendq->head, (size_t)len);
 		if(buffer_consume(sendq, len) != 0) {
 			stats_log("tcpclient: Unable to consume send queue");
 			return;
-		}
-		if(buffer_spacecount(&client->send_queue) < 1024) {
-			stats_log("tcpclient: Realign send queue");
-			buffer_realign(&client->send_queue);
 		}
 	}else{
 		ev_io_stop(client->loop, &client->write_watcher);
@@ -276,6 +272,8 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port) {
 }
 
 int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
+	buffer_t *sendq = &client->send_queue;
+
 	if(client->addr == NULL) {
 		stats_log("tcpclient: Cannot send before connect!");
 		return 1;
@@ -285,19 +283,27 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 		tcpclient_connect(client, NULL, NULL);
 	}
 
+	/*
 	if(buffer_datacount(&client->send_queue) > TCPCLIENT_SEND_QUEUE) {
 		stats_log("tcpclient: Send queue is full, dropping data");
 		return 2;
 	}
+	*/
 
-	while(buffer_spacecount(&client->send_queue) < len) {
-		if(buffer_expand(&client->send_queue) != 0) {
-			stats_log("tcpclient: Unable to allocate additional memory for send queue, dropping data");
+	if(buffer_spacecount(sendq) < len) {
+		if(buffer_realign(sendq) != 0) {
+			stats_log("tcpclient: Unable to realign send queue");
 			return 3;
 		}
 	}
-	memcpy(buffer_tail(&client->send_queue), buf, len);
-	buffer_produced(&client->send_queue, len);
+	while(buffer_spacecount(sendq) < len) {
+		if(buffer_expand(sendq) != 0) {
+			stats_log("tcpclient: Unable to allocate additional memory for send queue, dropping data");
+			return 4;
+		}
+	}
+	memcpy(buffer_tail(sendq), buf, len);
+	buffer_produced(sendq, len);
 
 	if(client->state == STATE_CONNECTED) {
 		ev_io_start(client->loop, &client->write_watcher);

@@ -313,9 +313,11 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 
 	line[len] = '\0';
 
+	/*
 	if(stats_validate_line(line, len) != 0) {
 		return 1;
 	}
+	*/
 
 	keyend = memchr(line, ':', len);
 	if(keyend == NULL) {
@@ -488,7 +490,7 @@ int stats_recv(int sd, void *data, void *ctx) {
 	session->server->bytes_recv_tcp += bytes_read;
 
 	if(buffer_produced(&session->buffer, bytes_read) != 0) {
-		stats_log("stats: Unable to consume buffer by %i bytes, aborting", bytes_read);
+		stats_log("stats: Unable to produce buffer by %i bytes, aborting", bytes_read);
 		stats_session_destroy(session);
 		return 4;
 	}
