@@ -1,3 +1,9 @@
+statsrelay (1.1.0) unstable; urgency=low
+
+  * Build with -O2
+
+ -- Jeremy Grosser <jeremy@synack.me>  Wed, 09 Jul 2014 15:12:53 -0700
+
 statsrelay (1.0.10) unstable; urgency=low
 
   * More bugfixes 
