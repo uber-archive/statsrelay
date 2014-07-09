@@ -81,14 +81,15 @@ statsrelay_address_t *parse_bind_argument(char *optarg) {
 	len = strlen(optarg);
 
 	address = malloc(sizeof(statsrelay_address_t));
-	address->host = optarg;
+	address->host = malloc(len);
+	memcpy(address->host, optarg, len);
 
-	ptr = memchr(optarg, ':', len);
+	ptr = memchr(address->host, ':', len);
 	if(ptr == NULL) {
 		address->port = "8125";
 	}else{
-		ptr[0] = '\0';
 		address->port = ptr + 1;
+		ptr[0] = '\0';
 	}
 	return address;
 }
@@ -136,9 +137,7 @@ int main(int argc, char **argv) {
 	}
 
 	if(options.binds == NULL) {
-		address = malloc(sizeof(statsrelay_address_t));
-		address->host = "*";
-		address->port = "8125";
+		address = parse_bind_argument("*:8125");
 		options.binds = g_list_prepend(options.binds, address);
 	}
 
@@ -192,6 +191,7 @@ int main(int argc, char **argv) {
 
 	for (l = options.binds; l != NULL; l = l->next) {
 		address = (statsrelay_address_t *)l->data;
+		free(address->host);
 		free(address);
 	}
 
