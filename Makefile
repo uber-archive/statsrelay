@@ -3,7 +3,7 @@ PREFIX := /usr/local
 bindir:=/bin
 
 #CFLAGS=-O0 -g -Wall -Wno-strict-aliasing -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE
-CFLAGS=-O0 -Wall -fno-strict-aliasing -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE -g
+CFLAGS=-O2 -Wall -fno-strict-aliasing -pedantic -std=c99 -D_XOPEN_SOURCE=600 -D_BSD_SOURCE -g
 
 LDFLAGS=-lcrypto -lev -lm -g
 
