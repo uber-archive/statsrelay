@@ -1,3 +1,9 @@
+statsrelay (1.0.9) unstable; urgency=low
+
+  * Fix segfault due to command line options parsing
+
+ -- Jeremy Grosser <jeremy@synack.me>  Wed, 09 Jul 2014 11:35:06 -0700
+
 statsrelay (1.0.8) unstable; urgency=low
 
   * Merge fix for init script
