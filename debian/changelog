@@ -1,3 +1,9 @@
+statsrelay (1.0.10) unstable; urgency=low
+
+  * More bugfixes 
+
+ -- Jeremy Grosser <jeremy@synack.me>  Wed, 09 Jul 2014 13:18:44 -0700
+
 statsrelay (1.0.9) unstable; urgency=low
 
   * Fix segfault due to command line options parsing
