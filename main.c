@@ -26,12 +26,6 @@ typedef struct statsrelay_options_t {
 	int verbose;
 } statsrelay_options_t;
 
-typedef struct statsrelay_address_t {
-	char *host;
-	char *port;
-} statsrelay_address_t;
-
-
 stats_server_t *server = NULL;
 tcpserver_t *ts = NULL;
 udpserver_t *us = NULL;
@@ -73,32 +67,12 @@ void print_help(const char *argv0) {
 		argv0);
 }
 
-statsrelay_address_t *parse_bind_argument(char *optarg) {
-	statsrelay_address_t *address;
-	char *ptr;
-	size_t len;
-
-	len = strlen(optarg);
-
-	address = malloc(sizeof(statsrelay_address_t));
-	address->host = malloc(len);
-	memcpy(address->host, optarg, len);
-
-	ptr = memchr(address->host, ':', len);
-	if(ptr == NULL) {
-		address->port = "8125";
-	}else{
-		address->port = ptr + 1;
-		ptr[0] = '\0';
-	}
-	return address;
-}
-
 int main(int argc, char **argv) {
 	ev_signal sigint_watcher, sigterm_watcher, sighup_watcher;
 	statsrelay_options_t options;
-	statsrelay_address_t *address;
+	char *address;
 	GList *l;
+	size_t len;
 	int option_index = 0;
 	char c = 0;
 
@@ -117,11 +91,9 @@ int main(int argc, char **argv) {
 				print_help(argv[0]);
 				return 1;
 			case 'b':
-				address = parse_bind_argument(optarg);
-				if(address == NULL) {
-					stats_log("main: Unable to parse bind argument %s", optarg);
-					return 2;
-				}
+				len = strlen(optarg);
+				address = malloc(len);
+				memcpy(address, optarg, len);
 				options.binds = g_list_prepend(options.binds, address);
 				break;
 			case 'v':
@@ -137,7 +109,8 @@ int main(int argc, char **argv) {
 	}
 
 	if(options.binds == NULL) {
-		address = parse_bind_argument("*:8125");
+		address = malloc(2);
+		memcpy(address, "*\0", 2);
 		options.binds = g_list_prepend(options.binds, address);
 	}
 
@@ -173,16 +146,17 @@ int main(int argc, char **argv) {
 
 	for (l = options.binds; l != NULL; l = l->next) {
 		address = l->data;
-		if(tcpserver_bind(ts, address->host, address->port, stats_connection, stats_recv) != 0) {
-			stats_log("main: Unable to bind tcp %s:%s", address->host, address->port);
+		if(tcpserver_bind(ts, address, "8125", stats_connection, stats_recv) != 0) {
+			stats_log("main: Unable to bind tcp %s", address);
 			return 6;
 		}
 
-		if(udpserver_bind(us, address->host, address->port, stats_udp_recv) != 0) {
-			stats_log("main: Unable to bind udp %s:%s", address->host, address->port);
+		if(udpserver_bind(us, address, "8125", stats_udp_recv) != 0) {
+			stats_log("main: Unable to bind udp %s", address);
 			return 7;
 		}
 	}
+
 
 	stats_log_verbose(options.verbose);
 
@@ -190,8 +164,7 @@ int main(int argc, char **argv) {
 	ev_run(loop, 0);
 
 	for (l = options.binds; l != NULL; l = l->next) {
-		address = (statsrelay_address_t *)l->data;
-		free(address->host);
+		address = l->data;
 		free(address);
 	}
 

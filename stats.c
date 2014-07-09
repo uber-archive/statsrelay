@@ -73,7 +73,7 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 
 	server->loop = loop;
 	server->backends = g_hash_table_new(g_str_hash, g_str_equal);
-	server->ketama_cache = g_hash_table_new(g_str_hash, g_str_equal);
+	server->ketama_cache = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
 
 	server->ketama_filename = filename;
 	if(ketama_roll(&server->kc, filename) == 0) {
@@ -158,6 +158,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 
 	size_t iplen;
 	char *ip;
+	char *pkey;
 	mcs *ks;
 
 	backend = g_hash_table_lookup(server->ketama_cache, key);
@@ -217,12 +218,11 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 
 		port--;
 		port[0] = ':';
-
-		g_hash_table_insert(server->ketama_cache, key, backend);
-		return backend;
 	}
 
-	g_hash_table_insert(server->ketama_cache, key, backend);
+	pkey = malloc(keylen);
+	memcpy(pkey, key, keylen);
+	g_hash_table_insert(server->ketama_cache, pkey, backend);
 	return backend;
 }
 
