@@ -514,6 +514,7 @@ int stats_udp_recv(int sd, void *data) {
 	bytes_read = read(sd, buffer_head(buffer), MAX_UDP_LENGTH);
 
 	if(bytes_read == 0) {
+		delete_buffer(buffer);
 		stats_log("stats: Got zero-length UDP payload. That's weird.");
 		return 1;
 	}
@@ -522,6 +523,7 @@ int stats_udp_recv(int sd, void *data) {
 		if(errno == EAGAIN) {
 			return 0;
 		}
+		delete_buffer(buffer);
 		stats_log("stats: Error calling recvfrom: %s", strerror(errno));
 		return 2;
 	}
@@ -532,25 +534,28 @@ int stats_udp_recv(int sd, void *data) {
 	while(buffer_datacount(buffer) > 0) {
 		head = (char *)buffer_head(buffer);
 		tail = memchr(head, '\n', buffer_datacount(buffer));
+		len = tail - head;
 
 		if(tail == NULL) {
 			break;
 		}
 
-		len = tail - head;
-
 		if(stats_relay_line(head, len, ss) != 0) {
+			delete_buffer(buffer);
 			return 3;
 		}
 		buffer_consume(buffer, len + 1);	// Add 1 to include the '\n'
 	}
 
-	if(buffer_datacount(buffer) > 0) {
-		stats_log("stats: Extra data still in buffer after processing UDP payload: \"%s\"", buffer_head(buffer));
+	len = buffer_datacount(buffer);
+	if(len > 0) {
+		if(stats_relay_line(buffer_head(buffer), len, ss) != 0) {
+			delete_buffer(buffer);
+			return 4;
+		}
 	}
 
 	delete_buffer(buffer);
-
 	return 0;
 }
 
