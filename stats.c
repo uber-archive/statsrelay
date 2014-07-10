@@ -505,10 +505,13 @@ int stats_recv(int sd, void *data, void *ctx) {
 int stats_udp_recv(int sd, void *data) {
 	stats_server_t *ss = (stats_server_t *)data;
 	ssize_t bytes_read;
-	char buffer[MAX_UDP_LENGTH];
+	buffer_t *buffer;
+	char *head, *tail;
+	size_t len;
 
-	//bytes_read = recvfrom(sd, buffer, MAX_UDP_LENGTH, 0, NULL, NULL);
-	bytes_read = read(sd, buffer, MAX_UDP_LENGTH);
+	buffer = create_buffer(MAX_UDP_LENGTH);
+
+	bytes_read = read(sd, buffer_head(buffer), MAX_UDP_LENGTH);
 
 	if(bytes_read == 0) {
 		stats_log("stats: Got zero-length UDP payload. That's weird.");
@@ -523,17 +526,30 @@ int stats_udp_recv(int sd, void *data) {
 		return 2;
 	}
 
+	buffer_produced(buffer, bytes_read);
 	ss->bytes_recv_udp += bytes_read;
 
-	// Strip extra newlines
-	while(buffer[bytes_read-1] == '\n') {
-		bytes_read--;
-	}
-	buffer[bytes_read] = '\0';
+	while(buffer_datacount(buffer) > 0) {
+		head = (char *)buffer_head(buffer);
+		tail = memchr(head, '\n', buffer_datacount(buffer));
 
-	if(stats_relay_line(buffer, bytes_read, ss) != 0) {
-		return 3;
+		if(tail == NULL) {
+			break;
+		}
+
+		len = tail - head;
+
+		if(stats_relay_line(head, len, ss) != 0) {
+			return 3;
+		}
+		buffer_consume(buffer, len + 1);	// Add 1 to include the '\n'
 	}
+
+	if(buffer_datacount(buffer) > 0) {
+		stats_log("stats: Extra data still in buffer after processing UDP payload: \"%s\"", buffer_head(buffer));
+	}
+
+	delete_buffer(buffer);
 
 	return 0;
 }
