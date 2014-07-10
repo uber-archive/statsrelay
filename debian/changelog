@@ -1,3 +1,9 @@
+statsrelay (1.1.1) unstable; urgency=low
+
+  * Support multi-line UDP packets
+
+ -- Jeremy Grosser <jeremy@synack.me>  Wed, 09 Jul 2014 17:10:13 -0700
+
 statsrelay (1.1.0) unstable; urgency=low
 
   * Build with -O2
