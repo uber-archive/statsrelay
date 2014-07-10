@@ -1,3 +1,9 @@
+statsrelay (1.1.2) unstable; urgency=low
+
+  * Handle trailing lines with no ending newline in UDP
+
+ -- Jeremy Grosser <jeremy@synack.me>  Wed, 09 Jul 2014 17:23:32 -0700
+
 statsrelay (1.1.1) unstable; urgency=low
 
   * Support multi-line UDP packets
