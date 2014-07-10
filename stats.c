@@ -28,6 +28,8 @@ struct stats_server_t {
 	GHashTable *ketama_cache;
 	struct ev_loop *loop;
 
+	uint64_t max_send_queue;
+
 	uint64_t bytes_recv_udp;
 	uint64_t bytes_recv_tcp;
 	uint64_t total_connections;
@@ -49,6 +51,7 @@ typedef struct {
 	uint64_t bytes_sent;
 	uint64_t relayed_lines;
 	uint64_t dropped_lines;
+	int failing;
 } stats_backend_t;
 
 static char *valid_stat_types[6] = {
@@ -83,6 +86,8 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 		return NULL;
 	}
 
+	server->max_send_queue = 0;
+
 	server->bytes_recv_udp = 0;
 	server->bytes_recv_tcp = 0;
 	server->malformed_lines = 0;
@@ -90,6 +95,10 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 	server->last_reload = 0;
 
 	return server;
+}
+
+void stats_set_max_send_queue(stats_server_t *server, uint64_t size) {
+	server->max_send_queue = size;
 }
 
 void stats_kill_backend(stats_server_t *server, stats_backend_t *backend) {
@@ -182,8 +191,9 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		backend->bytes_sent = 0;
 		backend->relayed_lines = 0;
 		backend->dropped_lines = 0;
+		backend->failing = 0;
 
-		if(tcpclient_init(&backend->client, server->loop, (void *)backend) != 0) {
+		if(tcpclient_init(&backend->client, server->loop, (void *)backend, server->max_send_queue) != 0) {
 			stats_log("stats: Unable to initialize tcpclient");
 			free(backend);
 			return NULL;
@@ -337,8 +347,13 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 
 	if(tcpclient_sendall(&backend->client, line, len+1) != 0) {
 		backend->dropped_lines++;
-		stats_log("stats: Error sending to backend %s", backend->key);
+		if(backend->failing == 0) {
+			stats_log("stats: Error sending to backend %s", backend->key);
+			backend->failing = 1;
+		}
 		return 2;
+	}else{
+		backend->failing = 0;
 	}
 
 	backend->bytes_queued += len+1;
@@ -404,6 +419,11 @@ void stats_send_statistics(stats_session_t *session) {
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
 			"backend:%s dropped_lines counter %" PRIu64 "\n",
 			backend->key, backend->dropped_lines));
+		
+		buffer_produced(response,
+			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
+			"backend:%s failing boolean %i\n",
+			backend->key, backend->failing));
 	}
 
 	buffer_produced(response,

@@ -11,6 +11,7 @@
 typedef struct stats_server_t stats_server_t;
 
 stats_server_t *stats_server_create(char *filename, struct ev_loop *loop);
+void stats_set_max_send_queue(stats_server_t *server, uint64_t size);
 void stats_server_reload(stats_server_t *server);
 void stats_server_destroy(stats_server_t *server);
 

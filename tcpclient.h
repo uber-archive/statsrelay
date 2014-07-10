@@ -51,15 +51,18 @@ typedef struct tcpclient_t {
 
 	struct addrinfo *addr;
     buffer_t send_queue;
+	uint64_t max_send_queue;
     enum tcpclient_state state;
     time_t last_error;
     int retry_count;
+	int failing;
     int sd;
 } tcpclient_t;
 
 int tcpclient_init(tcpclient_t *client,
 		struct ev_loop *loop,
-		void *callback_connect);
+		void *callback_connect,
+		uint64_t max_send_queue);
 
 void tcpclient_set_connect_callback(tcpclient_t *client,
 		tcpclient_callback callback);

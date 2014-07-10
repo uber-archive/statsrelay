@@ -18,12 +18,14 @@ static struct option long_options[] = {
 	{"bind",			required_argument,	NULL, 'b'},
 	{"verbose",			no_argument,		NULL, 'v'},
 	{"help",			no_argument,		NULL, 'h'},
+	{"max-send-queue",	required_argument,	NULL, 'q'},
 };
 
 typedef struct statsrelay_options_t {
 	GList *binds;
 	char *filename;
 	int verbose;
+	uint64_t max_send_queue;
 } statsrelay_options_t;
 
 stats_server_t *server = NULL;
@@ -63,14 +65,16 @@ void print_help(const char *argv0) {
     --bind=address[:port]   Bind to the given address and port              \n\
                             (default: *:8125)                               \n\
     --config=filename       Use the given ketama config file                \n\
-                            (default: /etc/statsrelay.conf)                 \n",
+                            (default: /etc/statsrelay.conf)                 \n\
+    --max-send-queue=BYTES  Limit each backend connection's send queue to   \n\
+                            the given size. (default: 134217728)            \n",
 		argv0);
 }
 
 int main(int argc, char **argv) {
 	ev_signal sigint_watcher, sigterm_watcher, sighup_watcher;
 	statsrelay_options_t options;
-	char *address;
+	char *address, *err;
 	GList *l;
 	size_t len;
 	int option_index = 0;
@@ -79,6 +83,7 @@ int main(int argc, char **argv) {
 	options.binds = NULL;
 	options.filename = "/etc/statsrelay.conf";
 	options.verbose = 0;
+	options.max_send_queue = 134217728;
 
 	while(c != -1) {
 		c = getopt_long(argc, argv, "c:b:vh", long_options, &option_index);
@@ -102,8 +107,11 @@ int main(int argc, char **argv) {
 			case 'c':
 				options.filename = optarg;
 				break;
+			case 'q':
+				options.max_send_queue = strtoull(optarg, &err, 10);
+				break;
 			default:
-				stats_log("main: Unknown argument %s", c);
+				stats_log("main: Unknown argument %c", c);
 				return 3;
 		}
 	}
@@ -159,6 +167,7 @@ int main(int argc, char **argv) {
 
 
 	stats_log_verbose(options.verbose);
+	stats_set_max_send_queue(server, options.max_send_queue);
 
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);

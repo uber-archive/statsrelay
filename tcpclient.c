@@ -45,12 +45,14 @@ void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *watcher, i
 	client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 }
 
-int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_context) {
+int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_context, uint64_t max_send_queue) {
 	client->state = STATE_INIT;
 	client->loop = loop;
 	client->sd = -1;
 	client->addr = NULL;
 	client->last_error = 0;
+	client->failing = 0;
+	client->max_send_queue = max_send_queue;
 
 	client->callback_connect = &tcpclient_default_callback;
 	client->callback_sent = &tcpclient_default_callback;
@@ -283,12 +285,16 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 		tcpclient_connect(client, NULL, NULL);
 	}
 
-	/*
-	if(buffer_datacount(&client->send_queue) > TCPCLIENT_SEND_QUEUE) {
-		stats_log("tcpclient: Send queue is full, dropping data");
+	if(buffer_datacount(&client->send_queue) > client->max_send_queue) {
+		if(client->failing == 0) {
+			stats_log("tcpclient: Send queue is full, dropping data");
+			client->failing = 1;
+		}
 		return 2;
+	}else{
+		// recovered
+		client->failing = 0;
 	}
-	*/
 
 	if(buffer_spacecount(sendq) < len) {
 		if(buffer_realign(sendq) != 0) {
