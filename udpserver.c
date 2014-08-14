@@ -90,6 +90,7 @@ udplistener_t *udplistener_create(udpserver_t *server, struct addrinfo *addr, in
 	}
 	if(inet_ntop(addr->ai_family, ip, addr_string, addr->ai_addrlen) == NULL) {
 		stats_log("udplistener: Unable to format network address string");
+		free(listener);
 		return NULL;
 	}
 
@@ -177,6 +178,7 @@ int udpserver_bind(udpserver_t *server, char *address_and_port, char *default_po
 	for(p = addrs; p != NULL; p = p->ai_next) {
 		if(server->listeners_len >= MAX_UDP_HANDLERS) {
 			stats_log("udpserver: Unable to create more than %i UDP listeners", MAX_UDP_HANDLERS);
+			freeaddrinfo(addrs);
 			return 1;
 		}
 		if((address == NULL) && (p->ai_family != AF_INET6)) {

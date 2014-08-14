@@ -195,6 +195,7 @@ tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *addr, vo
 	}
 	if(inet_ntop(addr->ai_family, ip, addr_string, addr->ai_addrlen) == NULL) {
 		stats_log("tcplistener: Unable to format network address string");
+		free(listener);
 		return NULL;
 	}
 
@@ -289,6 +290,7 @@ int tcpserver_bind(tcpserver_t *server, char *address_and_port, char *default_po
 	for(p = addrs; p != NULL; p = p->ai_next) {
 		if(server->listeners_len >= MAX_TCP_HANDLERS) {
 			stats_log("tcpserver: Unable to create more than %i TCP listeners", MAX_TCP_HANDLERS);
+			freeaddrinfo(addrs);
 			return 1;
 		}
 		if((address == NULL) && (p->ai_family != AF_INET6)) {
