@@ -4,3 +4,19 @@ before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -qq libev-dev libglib2.0-dev libssl-dev pkg-config
 script: make
+
+env:
+  global:
+   # The next declaration is the encrypted COVERITY_SCAN_TOKEN, created
+   #   via the "travis encrypt" command using the project repo's public key
+   - secure: "SlDD9j89v8VAPzvE4MQ/f8mjOq9Ws6YjXL7v0cBZRBmYQIRBJn4u5yLWNfdrBkwHE06O+t+XVkM5ZV38U1OFbFdYQ27fN6AiAV1MGpwQqd75iIulbGilvwTev5L8ZO5WCrDYcWwwxrOS68JKIRcQdORAxE1eOaiG8Mtqw1nOMOU="
+
+addons:
+  coverity_scan:
+    project:
+      name: "uber/statsrelay"
+      description: "A consistent-hashing relay for statsd metrics"
+    notification_email: jeremy@synack.me
+    build_command_prepend: "make clean"
+    build_command:   "make"
+    branch_pattern: coverity_scan
