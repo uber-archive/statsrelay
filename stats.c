@@ -341,7 +341,6 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 	line[len] = '\n';
 
 	if(backend == NULL) {
-		backend->dropped_lines++;
 		return 1;
 	}
 

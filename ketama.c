@@ -214,7 +214,10 @@ file_modtime( char* filename )
     struct tm* clock;
     struct stat attrib;
 
-    stat( filename, &attrib );
+    if(stat( filename, &attrib ) != 0) {
+        strcpy(k_error, "Unable to stat file");
+        return 0;
+    }
     clock = gmtime( &( attrib.st_mtime ) );
 
     return mktime( clock );

@@ -167,7 +167,10 @@ void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int events
 	ev_timer_stop(loop, &client->timeout_watcher);
 	ev_io_stop(loop, &client->connect_watcher);
 
-	getsockopt(client->sd, SOL_SOCKET, SO_ERROR, &err, &len);
+	if(getsockopt(client->sd, SOL_SOCKET, SO_ERROR, &err, &len) != 0) {
+		stats_log("tcpclient: Unable to get socket error state: %s", strerror(errno));
+		return;
+	}
 
 	if((events & EV_ERROR) || err) {
 		stats_log("tcpclient: Connect failed: %s", strerror(err));
