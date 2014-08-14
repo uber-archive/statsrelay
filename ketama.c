@@ -39,7 +39,7 @@
 #include <math.h>           /* floor & floorf                       */
 #include <sys/stat.h>       /* various type definitions             */
 #include <sys/shm.h>        /* shared memory functions and structs  */
-#include <sys/types.h>		
+#include <sys/types.h>        
 #ifdef DEBUG
 #include <syslog.h>
 #endif
@@ -86,7 +86,7 @@ track_shm_data(int *data) {
     if (num_data == shm_data_size) {
         void *tmp = realloc(shm_data, sizeof(int*)*(shm_data_size + 1024));
         if (tmp != NULL) {
-    	    shm_data = tmp;
+            shm_data = tmp;
         } else {
             set_error("Cannot realloc shm data tracker");
             exit(1);
@@ -170,7 +170,7 @@ ketama_sem_init( key_t key )
     int sem_set_id;
 
     sem_set_id = semget( key, 1, 0 );
-	track_sem_id(sem_set_id);
+    track_sem_id(sem_set_id);
 
     if ( sem_set_id == -1 )
     {
@@ -178,7 +178,7 @@ ketama_sem_init( key_t key )
         sem_set_id = semget( key, 1, IPC_CREAT | 0666 );
         track_sem_id(sem_set_id);
 
-		if ( sem_set_id == -1 )
+        if ( sem_set_id == -1 )
         {
             strcpy( k_error, "Could not open semaphore!" );
             return 0;
@@ -228,8 +228,10 @@ static serverinfo
 read_server_line( char* line )
 {
     char* delim = "\t ";
+    size_t len;
     serverinfo server;
     server.memory = 0;
+    memset(server.addr, '\0', 22);
 
     char* tok = strtok( line, delim );
     if ( ( strlen( tok ) - 1 ) < 23 )
@@ -251,9 +253,9 @@ read_server_line( char* line )
         }
         else
         {
-            mem = (char *)malloc( strlen( tok ) );
-            strncpy( mem, tok, strlen( tok ) - 1 );
-            mem[ strlen( tok ) - 1 ] = '\0';
+            len = strlen(tok);
+            mem = (char *)malloc(len + 1);
+            memcpy( mem, tok, len + 1);
 
             errno = 0;
             server.memory = strtol( mem, &endptr, 10 );
@@ -470,7 +472,7 @@ ketama_create_continuum( key_t key, char* filename )
     shmid = shmget( key, MC_SHMSIZE, 0644 | IPC_CREAT );
     track_shm_id(shmid);
 
-	data = shmat( shmid, (void *)0, 0 );
+    data = shmat( shmid, (void *)0, 0 );
     if ( data == (void *)(-1) )
     {
         strcpy( k_error, "Can't open shmmem for writing." );
@@ -539,10 +541,10 @@ ketama_roll( ketama_continuum* contptr, char* filename )
 
         // if we are waiting for > 1 second, take drastic action:
         if(++sanity > 1000000)
-	{
+    {
             usleep( rand()%50000 );
             ketama_sem_unlock( sem_set_id );
-	    break;
+        break;
         }
     }
 
@@ -553,7 +555,7 @@ ketama_roll( ketama_continuum* contptr, char* filename )
         shmid = shmget( key, MC_SHMSIZE, 0 ); // read only attempt.
         track_shm_id(shmid);
 
-		data = shmat( shmid, (void *)0, SHM_RDONLY );
+        data = shmat( shmid, (void *)0, SHM_RDONLY );
 
         if ( data == (void *)(-1) || (*contptr)->modtime != 0 )
         {
@@ -613,7 +615,7 @@ ketama_smoke( ketama_continuum contptr )
     }
 
     if (sem_ids != NULL) {
-    	for (i = 0; i < num_sem_ids; i++) {
+        for (i = 0; i < num_sem_ids; i++) {
             semctl(sem_ids[i], 0, IPC_RMID, 0);
         }
         free(sem_ids);
