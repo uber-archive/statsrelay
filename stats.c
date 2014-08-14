@@ -541,11 +541,13 @@ int stats_udp_recv(int sd, void *data) {
 
 	if(bytes_read < 0) {
 		if(errno == EAGAIN) {
+			delete_buffer(buffer);
 			return 0;
+		}else{
+			delete_buffer(buffer);
+			stats_log("stats: Error calling recvfrom: %s", strerror(errno));
+			return 2;
 		}
-		delete_buffer(buffer);
-		stats_log("stats: Error calling recvfrom: %s", strerror(errno));
-		return 2;
 	}
 
 	buffer_produced(buffer, bytes_read);
