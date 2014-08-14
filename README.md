@@ -1,6 +1,9 @@
 # statsrelay
 A consistent-hashing relay for statsd metrics
 
+[![Build Status](https://travis-ci.org/uber/statsrelay.svg?branch=master)](https://travis-ci.org/uber/statsrelay)
+[![Coverity Status](https://scan.coverity.com/projects/2789)](https://scan.coverity.com/projects/2789/badge.svg)
+
 # License
 MIT License  
 Copyright (c) 2014 Uber Technologies, Inc.
