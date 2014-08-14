@@ -230,8 +230,8 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		port[0] = ':';
 	}
 
-	pkey = malloc(keylen);
-	memcpy(pkey, key, keylen);
+	pkey = malloc(keylen+1);
+	memcpy(pkey, key, keylen+1);
 	g_hash_table_insert(server->ketama_cache, pkey, backend);
 	return backend;
 }
