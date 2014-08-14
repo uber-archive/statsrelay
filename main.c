@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
 				print_help(argv[0]);
 				return 1;
 			case 'b':
-				len = strlen(optarg);
+				len = strlen(optarg) + 1;
 				address = malloc(len);
 				memcpy(address, optarg, len);
 				options.binds = g_list_prepend(options.binds, address);
