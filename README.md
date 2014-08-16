@@ -16,13 +16,17 @@ Copyright (c) 2007-2014 Richard Jones <rj@metabrew.com>
 # Build
 
 Dependencies:
+- automake
 - pkg-config
 - libssl (>= 1.0.1e)
 - libev (>= 4.11)
 - glib (>= 2.32)
 
 ```
-apt-get install pkg-config libev-dev libglib2.0-dev libssl-dev
+apt-get install automake pkg-config libev-dev libglib2.0-dev libssl-dev
+
+autoreconf --install
+./configure
 make clean
 make
 make install
