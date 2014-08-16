@@ -1,3 +1,4 @@
+#include "config.h"
 #include "tcpserver.h"
 #include "udpserver.h"
 #include "stats.h"

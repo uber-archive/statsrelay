@@ -1,6 +1,7 @@
 #ifndef UDPSERVER_H
 #define UDPSERVER_H
 
+#include "config.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>

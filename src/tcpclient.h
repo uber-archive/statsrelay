@@ -1,6 +1,7 @@
 #ifndef TCPCLIENT_H
 #define TCPCLIENT_H
 
+#include "config.h"
 #include "buffer.h"
 #include <sys/types.h>
 #include <sys/socket.h>

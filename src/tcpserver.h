@@ -1,6 +1,7 @@
 #ifndef TCPSERVER_H
 #define TCPSERVER_H
 
+#include "config.h"
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
