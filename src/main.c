@@ -59,7 +59,8 @@ void reload_config(struct ev_loop *loop, ev_signal *w, int revents) {
 }
 
 void print_help(const char *argv0) {
-	fprintf(stderr, "%s [options]                                           \n\
+	fprintf(stderr, "%s                                                     \n\
+Usage: %s [options]                                                         \n\
     --help                  Display this message                            \n\
     --verbose               Write log messages to stderr in addition to     \n\
                             syslog                                          \n\
@@ -69,7 +70,7 @@ void print_help(const char *argv0) {
                             (default: /etc/statsrelay.conf)                 \n\
     --max-send-queue=BYTES  Limit each backend connection's send queue to   \n\
                             the given size. (default: 134217728)            \n",
-		argv0);
+		PACKAGE_STRING, argv0);
 }
 
 int main(int argc, char **argv) {
