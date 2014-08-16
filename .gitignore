@@ -2,5 +2,14 @@
 *.swp
 statsrelay
 test/devnull
-gmon.out
-perf.*
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache/
+config.*
+configure
+depcomp
+install-sh
+missing
+.deps
+stamp-*
