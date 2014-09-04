@@ -302,7 +302,9 @@ int stats_validate_line(char *line, size_t len) {
 
 	if(end != NULL) {
 		end[0] = c;
-		if(end[1] == '@') {
+		// end[0] is currently the second | char
+		// test if we have at least 1 char following it (@)
+		if((len - (end - line) > 1) && (end[1] == '@')) {
 			start = end + 2;
 			plen = len - (start - line);
 			if(plen == 0) {
