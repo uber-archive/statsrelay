@@ -277,7 +277,7 @@ int stats_validate_line(char *line, size_t len) {
 	start = end + 1;
 	plen = len - (start - line);
 
-	end = memchr(start, '@', plen);
+	end = memchr(start, '|', plen);
 	if(end != NULL) {
 		c = end[0];
 		end[0] = '\0';
@@ -295,23 +295,28 @@ int stats_validate_line(char *line, size_t len) {
 		}
 	}
 
-	if(end != NULL) {
-		end[0] = c;
-		start = end + 1;
-		plen = len - (start - line);
-		if(plen == 0) {
-			stats_log("stats: Invalid line \"%s\" @ sample with no rate", line);
-			return 5;
-		}
-		if((strtod(start, &err) == 0.0) && err == start) {
-			stats_log("stats: Invalid line \"%s\" invalid sample rate", line);
-			return 6;
-		}
-	}
-
 	if(valid == 0) {
 		stats_log("stats: Invalid line \"%s\" unknown stat type \"%s\"", line, start);
 		return 7;
+	}
+
+	if(end != NULL) {
+		end[0] = c;
+		if(end[1] == '@') {
+			start = end + 2;
+			plen = len - (start - line);
+			if(plen == 0) {
+				stats_log("stats: Invalid line \"%s\" @ sample with no rate", line);
+				return 5;
+			}
+			if((strtod(start, &err) == 0.0) && err == start) {
+				stats_log("stats: Invalid line \"%s\" invalid sample rate", line);
+				return 6;
+			}
+		}else{
+			stats_log("stats: Invalid line \"%s\" no @ sample rate specifier", line);
+			return 8;
+		}
 	}
 
 	return 0;
