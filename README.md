@@ -5,12 +5,12 @@ A consistent-hashing relay for statsd metrics
 [![Coverity Status](https://scan.coverity.com/projects/2789/badge.svg)](https://scan.coverity.com/projects/2789)
 
 # License
-MIT License  
+MIT License
 Copyright (c) 2014 Uber Technologies, Inc.
 
-libketama  
-BSD License  
-Copyright (c) 2007 Last.fm  
+libketama
+BSD License
+Copyright (c) 2007 Last.fm
 Copyright (c) 2007-2014 Richard Jones <rj@metabrew.com>
 
 # Build
@@ -98,8 +98,8 @@ status output is denoted by two consecutive newlines "\n\n"
 
 stats example:
 ```
-nc localhost 8125
-status
+$ echo status | nc localhost 8125
+
 global bytes_recv_udp counter 0
 global bytes_recv_tcp counter 41
 global total_connections counter 1
