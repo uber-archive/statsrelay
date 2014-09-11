@@ -61,8 +61,7 @@ void reload_config(struct ev_loop *loop, ev_signal *w, int revents) {
 }
 
 void print_help(const char *argv0) {
-	fprintf(stderr, "%s                                                     \n\
-Usage: %s [options]                                                         \n\
+	fprintf(stderr, "Usage: %s [options]                                    \n\
     --help                  Display this message                            \n\
     --verbose               Write log messages to stderr in addition to     \n\
                             syslog                                          \n\
@@ -75,7 +74,7 @@ Usage: %s [options]                                                         \n\
     --no-validation         Disable parsing of stat values. Relayed metrics \n\
                             may not actually be valid past the ':' character\n\
                             (default: validation is enabled)                \n",
-		PACKAGE_STRING, argv0);
+		argv0);
 }
 
 int main(int argc, char **argv) {
@@ -92,6 +91,8 @@ int main(int argc, char **argv) {
 	options.verbose = 0;
 	options.max_send_queue = 134217728;
 	options.validate_lines = 1;
+
+	stats_log(PACKAGE_STRING);
 
 	while(c != -1) {
 		c = getopt_long(argc, argv, "c:b:vh", long_options, &option_index);
