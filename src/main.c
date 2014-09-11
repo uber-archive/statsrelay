@@ -20,6 +20,7 @@ static struct option long_options[] = {
 	{"verbose",			no_argument,		NULL, 'v'},
 	{"help",			no_argument,		NULL, 'h'},
 	{"max-send-queue",	required_argument,	NULL, 'q'},
+	{"no-validation",	no_argument,		NULL, 'n'},
 };
 
 typedef struct statsrelay_options_t {
@@ -27,6 +28,7 @@ typedef struct statsrelay_options_t {
 	char *filename;
 	int verbose;
 	uint64_t max_send_queue;
+	int validate_lines;
 } statsrelay_options_t;
 
 stats_server_t *server = NULL;
@@ -69,7 +71,10 @@ Usage: %s [options]                                                         \n\
     --config=filename       Use the given ketama config file                \n\
                             (default: /etc/statsrelay.conf)                 \n\
     --max-send-queue=BYTES  Limit each backend connection's send queue to   \n\
-                            the given size. (default: 134217728)            \n",
+                            the given size. (default: 134217728)            \n\
+    --no-validation         Disable parsing of stat values. Relayed metrics \n\
+                            may not actually be valid past the ':' character\n\
+                            (default: validation is enabled)                \n",
 		PACKAGE_STRING, argv0);
 }
 
@@ -86,6 +91,7 @@ int main(int argc, char **argv) {
 	options.filename = "/etc/statsrelay.conf";
 	options.verbose = 0;
 	options.max_send_queue = 134217728;
+	options.validate_lines = 1;
 
 	while(c != -1) {
 		c = getopt_long(argc, argv, "c:b:vh", long_options, &option_index);
@@ -111,6 +117,9 @@ int main(int argc, char **argv) {
 				break;
 			case 'q':
 				options.max_send_queue = strtoull(optarg, &err, 10);
+				break;
+			case 'n':
+				options.validate_lines = 0;
 				break;
 			default:
 				stats_log("main: Unknown argument %c", c);
@@ -170,6 +179,7 @@ int main(int argc, char **argv) {
 
 	stats_log_verbose(options.verbose);
 	stats_set_max_send_queue(server, options.max_send_queue);
+	stats_set_validate_lines(server, options.validate_lines);
 
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);

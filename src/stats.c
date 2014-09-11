@@ -29,6 +29,7 @@ struct stats_server_t {
 	struct ev_loop *loop;
 
 	uint64_t max_send_queue;
+	int validate_lines;
 
 	uint64_t bytes_recv_udp;
 	uint64_t bytes_recv_tcp;
@@ -99,6 +100,10 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 
 void stats_set_max_send_queue(stats_server_t *server, uint64_t size) {
 	server->max_send_queue = size;
+}
+
+void stats_set_validate_lines(stats_server_t *server, int validate_lines) {
+	server->validate_lines = validate_lines;
 }
 
 void stats_kill_backend(stats_server_t *server, stats_backend_t *backend) {
@@ -323,7 +328,7 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 
 	line[len] = '\0';
 
-	if(stats_validate_line(line, len) != 0) {
+	if(ss->validate_lines == 1 && stats_validate_line(line, len) != 0) {
 		return 1;
 	}
 
