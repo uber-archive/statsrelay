@@ -5,12 +5,12 @@ A consistent-hashing relay for statsd metrics
 [![Coverity Status](https://scan.coverity.com/projects/2789/badge.svg)](https://scan.coverity.com/projects/2789)
 
 # License
-MIT License  
+MIT License
 Copyright (c) 2014 Uber Technologies, Inc.
 
-libketama  
-BSD License  
-Copyright (c) 2007 Last.fm  
+libketama
+BSD License
+Copyright (c) 2007 Last.fm
 Copyright (c) 2007-2014 Richard Jones <rj@metabrew.com>
 
 # Build
@@ -34,7 +34,20 @@ make install
 
 # Use
 
-Example config:
+```
+Usage: statsrelay [options]
+    --help                  Display this message
+    --verbose               Write log messages to stderr in addition to
+                            syslog
+    --bind=address[:port]   Bind to the given address and port
+                            (default: *:8125)
+    --config=filename       Use the given ketama config file
+                            (default: /etc/statsrelay.conf)
+    --max-send-queue=BYTES  Limit each backend connection's send queue to
+                            the given size. (default: 134217728)
+```
+
+Example ketama config:
 ```
 # This is a comment
 # Each line is a backend server definition
@@ -45,14 +58,14 @@ Example config:
 ```
 
 ```
-statsrelay /path/to/statsrelay.conf
+statsrelay --config=/path/to/statsrelay.conf
 ```
 
 This process will run in the foreground. If you need to daemonize, use
 start-stop-script, daemontools, supervisord, upstart, systemd, or your
 preferred service watchdog.
 
-statsrelay binds to all interfaces on port 8125, tcp and udp.
+By default statsrelay binds to all interfaces on port 8125, tcp and udp.
 
 For each line that statsrelay receives in the statsd format
 "statname.foo.bar:1|c\n", the key will be hashed to determine which
@@ -64,9 +77,10 @@ connection fails, the queue persists in memory and the connection will
 be retried after 5 seconds. Any stats received for that backend during
 the retry window are added to the queue.
 
-Each backend has it's own send queue. If a send queue reaches 128MB in
-size, new incoming stats are dropped until a backend connection is
-successful and the queue begins to drain.
+Each backend has its own send queue. If a send queue reaches
+`max-send-queue` bytes (default: 128MB) in size, new incoming stats
+are dropped until a backend connection is successful and the queue
+begins to drain.
 
 All log messages are sent to syslog with the INFO priority.
 
@@ -84,8 +98,8 @@ status output is denoted by two consecutive newlines "\n\n"
 
 stats example:
 ```
-nc localhost 8125
-status
+$ echo status | nc localhost 8125
+
 global bytes_recv_udp counter 0
 global bytes_recv_tcp counter 41
 global total_connections counter 1
