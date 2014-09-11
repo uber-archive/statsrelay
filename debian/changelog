@@ -1,3 +1,10 @@
+statsrelay (1.1.4-1) unstable; urgency=low
+
+  * Add dh-autoreconf as a build dependancy
+  * Drop version requirement of glib2.0-dev
+
+ -- David Gillies <dave.gillies@gmail.com>  Thu, 11 Sep 2014 11:33:47 +1000
+
 statsrelay (1.1.4) unstable; urgency=low
 
   * Add a --no-validation flag
