@@ -2,8 +2,8 @@ language: c
 compiler: gcc
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -qq automake libev-dev libglib2.0-dev libssl-dev pkg-config
-script: "autoreconf --install && ./configure && make"
+  - sudo apt-get install -qq git-buildpackage devscripts lintian equivs
+script: "git-buildpackage --git-debian-branch=debian --git-upstream-branch=master --git-ignore-branch --git-prebuild='mk-build-deps -r -s sudo -i debian/control' --git-builder='debuild -i\\.\\(git\\|travis.yml\\) -I -us -uc'"
 
 env:
   global:
