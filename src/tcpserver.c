@@ -205,7 +205,7 @@ tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *addr, vo
 		return NULL;
 	}
 
-	err = setsockopt(listener->sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
+	err = setsockopt(listener->sd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(int));
 	if(err != 0) {
 		stats_log("tcplistener: Error setting SO_REUSEADDR on %s[:%i]: %s", addr_string, port, strerror(errno));
 		free(listener);

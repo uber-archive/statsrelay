@@ -77,6 +77,26 @@ void print_help(const char *argv0) {
 		argv0);
 }
 
+int fork_workers() {
+	pid_t pid;
+	int nprocs = sysconf(_SC_NPROCESSORS_ONLN);
+
+	for(int i = 1; i < nprocs; i++) {
+		pid = fork();
+		if(pid < 0) {
+			return -1;
+		}
+		if(pid == 0) {
+			return 0;
+		}else{
+			stats_log("main: Forked pid %i", pid);
+			ev_loop_fork(loop);
+		}
+	}
+
+	return 1;
+}
+
 int main(int argc, char **argv) {
 	ev_signal sigint_watcher, sigterm_watcher, sighup_watcher;
 	statsrelay_options_t options;
@@ -164,6 +184,11 @@ int main(int argc, char **argv) {
 		return 5;
 	}
 
+	if(fork_workers() < 0) {
+		stats_log("main: Unable to fork, exiting");
+		return 8;
+	}
+
 	for (l = options.binds; l != NULL; l = l->next) {
 		address = l->data;
 		if(tcpserver_bind(ts, address, "8125", stats_connection, stats_recv) != 0) {
@@ -181,21 +206,6 @@ int main(int argc, char **argv) {
 	stats_log_verbose(options.verbose);
 	stats_set_max_send_queue(server, options.max_send_queue);
 	stats_set_validate_lines(server, options.validate_lines);
-
-	pid_t pid;
-	for(int i = 1; i < 5; i++) {
-		stats_log("main: Starting process %i", i);
-		pid = fork();
-		if(pid < 0) {
-			stats_log("main: Unable to fork, exiting");
-			return 8;
-		}
-		if(pid == 0) {
-			break;
-		}else{
-			stats_log("main: Forked pid %i", pid);
-		}
-	}
 
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);
