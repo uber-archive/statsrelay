@@ -4,6 +4,8 @@
 #include <stdio.h>
 #include <syslog.h>
 
+#include <unistd.h>
+
 int g_verbose = 1;
 
 void stats_log_verbose(int verbose) {
@@ -20,6 +22,7 @@ void stats_log(const char *format, ...) {
 
 	if(g_verbose == 1) {
 		va_start(args, format);
+		fprintf(stderr, "%i ", getpid());
 		vfprintf(stderr, format, args);
 		va_end(args);
 		fprintf(stderr, "\n");

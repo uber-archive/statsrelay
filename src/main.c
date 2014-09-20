@@ -182,6 +182,21 @@ int main(int argc, char **argv) {
 	stats_set_max_send_queue(server, options.max_send_queue);
 	stats_set_validate_lines(server, options.validate_lines);
 
+	pid_t pid;
+	for(int i = 1; i < 5; i++) {
+		stats_log("main: Starting process %i", i);
+		pid = fork();
+		if(pid < 0) {
+			stats_log("main: Unable to fork, exiting");
+			return 8;
+		}
+		if(pid == 0) {
+			break;
+		}else{
+			stats_log("main: Forked pid %i", pid);
+		}
+	}
+
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);
 
