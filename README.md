@@ -29,6 +29,7 @@ autoreconf --install
 ./configure
 make clean
 make
+make check
 make install
 ```
 
