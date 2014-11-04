@@ -17,6 +17,6 @@ addons:
       name: "uber/statsrelay"
       description: "A consistent-hashing relay for statsd metrics"
     notification_email: jeremy@synack.me
-    build_command_prepend: "make clean"
-    build_command:   "make"
+    build_command_prepend: "autoreconf --install && ./configure"
+    build_command: "make"
     branch_pattern: coverity_scan
