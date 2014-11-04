@@ -1,6 +1,7 @@
 *.o
 *.swp
 statsrelay
+test_stats
 test/devnull
 Makefile
 Makefile.in

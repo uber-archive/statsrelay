@@ -3,7 +3,7 @@ compiler: gcc
 before_install:
   - sudo apt-get update -qq
   - sudo apt-get install -qq automake libev-dev libglib2.0-dev libssl-dev pkg-config
-script: "autoreconf --install && ./configure && make"
+script: "autoreconf --install && ./configure && make && make check"
 
 env:
   global:
