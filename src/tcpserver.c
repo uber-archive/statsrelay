@@ -305,8 +305,10 @@ int tcpserver_bind(tcpserver_t *server, char *address_and_port, char *default_po
 		ev_io_start(server->loop, listener->watcher);
 	}
 
-	port--;
-	port[0] = ':';
+	if(port != default_port) {
+		port--;
+		port[0] = ':';
+	}
 
 	freeaddrinfo(addrs);
 	return 0;

@@ -168,6 +168,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 	stats_backend_t *backend;
 	char *address;
 	char *port;
+	char *protocol;
 	int ret;
 
 	size_t iplen;
@@ -224,7 +225,15 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		port[0] = '\0';
 		port++;
 
-		ret = tcpclient_connect(&backend->client, address, port);
+		protocol = memchr(port, ':', (port - address));
+		if(protocol != NULL) {
+			protocol[0] = '\0';
+			protocol++;
+		}else{
+			protocol = "tcp";
+		}
+
+		ret = tcpclient_connect(&backend->client, address, port, protocol);
 		if(ret != 0) {
 			stats_log("stats: Error connecting to [%s]:%s (tcpclient_connect returned %i)", address, port, ret);
 			free(address);

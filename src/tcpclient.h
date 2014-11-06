@@ -1,5 +1,7 @@
 #ifndef TCPCLIENT_H
 #define TCPCLIENT_H
+// This module handles all outbound network communication. Despite it's name,
+// it is also capable of connecting to UDP endpoints.
 
 #include "config.h"
 #include "buffer.h"
@@ -14,6 +16,7 @@
 #define TCPCLIENT_RETRY_TIMEOUT 5
 #define TCPCLIENT_RECV_BUFFER 65536
 #define TCPCLIENT_SEND_QUEUE 134217728	// 128MB
+#define TCPCLIENT_NAME_LEN 256
 
 enum tcpclient_event {
 	EVENT_CONNECTED,
@@ -50,6 +53,7 @@ typedef struct tcpclient_t {
     ev_io read_watcher;
     ev_io write_watcher;
 
+	char name[TCPCLIENT_NAME_LEN];
 	struct addrinfo *addr;
     buffer_t send_queue;
 	uint64_t max_send_queue;
@@ -58,6 +62,7 @@ typedef struct tcpclient_t {
     int retry_count;
 	int failing;
     int sd;
+	int socktype;
 } tcpclient_t;
 
 int tcpclient_init(tcpclient_t *client,
@@ -76,7 +81,8 @@ void tcpclient_set_error_callback(tcpclient_t *client,
 
 int tcpclient_connect(tcpclient_t *client,
 		char *host,
-		char *port);
+		char *port,
+		char *protocol);
 
 int tcpclient_sendall(tcpclient_t *client,
 		char *buf,
