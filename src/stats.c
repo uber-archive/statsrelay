@@ -138,7 +138,7 @@ void stats_server_reload(stats_server_t *server) {
 void *stats_connection(int sd, void *ctx) {
 	stats_session_t *session;
 
-	stats_log("stats: Accepted connection on socket %i", sd);
+	//stats_log("stats: Accepted connection on socket %i", sd);
 	session = (stats_session_t *)malloc(sizeof(stats_session_t));
 	if(session == NULL) {
 		stats_log("stats: Unable to allocate memory");
@@ -520,7 +520,7 @@ int stats_recv(int sd, void *data, void *ctx) {
 	}
 
 	if(bytes_read == 0) {
-		stats_log("stats: Client closed connection");
+		//stats_log("stats: Client closed connection");
 		stats_session_destroy(session);
 		return 3;
 	}
