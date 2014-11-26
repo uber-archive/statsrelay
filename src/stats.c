@@ -502,14 +502,20 @@ int stats_recv(int sd, void *data, void *ctx) {
 	ssize_t bytes_read;
 	size_t space;
 
+	// First we try to realign the buffer (memmove so that head and ptr match)
+	// If that fails, we double the size of the buffer
 	space = buffer_spacecount(&session->buffer);
 	if(space == 0) {
-		if(buffer_expand(&session->buffer) != 0) {
-			stats_log("stats: Unable to expand buffer, aborting");
-			stats_session_destroy(session);
-			return 1;
-		}
+		buffer_realign(&session->buffer);
 		space = buffer_spacecount(&session->buffer);
+		if(space == 0) {
+			if(buffer_expand(&session->buffer) != 0) {
+				stats_log("stats: Unable to expand buffer, aborting");
+				stats_session_destroy(session);
+				return 1;
+			}
+			space = buffer_spacecount(&session->buffer);
+		}
 	}
 
 	bytes_read = recv(sd, buffer_tail(&session->buffer), space, 0);
