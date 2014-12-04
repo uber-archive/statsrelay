@@ -71,10 +71,10 @@ int main(int argc, char **argv) {
 	options.filename = "/etc/statsrelay.conf";
 	options.verbose = 0;
 
-	while(c != -1) {
+	while (c != -1) {
 		c = getopt_long(argc, argv, "c:vh", long_options, &option_index);
 
-		switch(c) {
+		switch (c) {
 			case -1:
 				break;
 			case 0:
@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
 
 	server = stats_server_create(options.filename, NULL);
 
-	if(server == NULL) {
+	if (server == NULL) {
 		stats_log("main: Unable to create stats_server");
 		return 1;
 	}

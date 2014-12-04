@@ -42,20 +42,20 @@ void graceful_shutdown(struct ev_loop *loop, ev_signal *w, int revents) {
 	stats_log("Received signal, shutting down.");
 	ev_break(loop, EVBREAK_ALL);
 
-	if(ts != NULL) {
+	if (ts != NULL) {
 		tcpserver_destroy(ts);
 	}
-	if(us != NULL) {
+	if (us != NULL) {
 		udpserver_destroy(us);
 	}
-	if(server != NULL) {
+	if (server != NULL) {
 		stats_server_destroy(server);
 	}
 }
 
 void reload_config(struct ev_loop *loop, ev_signal *w, int revents) {
 	stats_log("Received SIGHUP, reloading.");
-	if(server != NULL) {
+	if (server != NULL) {
 		stats_server_reload(server);
 	}
 }
@@ -94,10 +94,10 @@ int main(int argc, char **argv) {
 
 	stats_log(PACKAGE_STRING);
 
-	while(c != -1) {
+	while (c != -1) {
 		c = getopt_long(argc, argv, "c:b:vh", long_options, &option_index);
 
-		switch(c) {
+		switch (c) {
 			case -1:
 				break;
 			case 0:
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if(options.binds == NULL) {
+	if (options.binds == NULL) {
 		address = malloc(2);
 		memcpy(address, "*\0", 2);
 		options.binds = g_list_prepend(options.binds, address);
@@ -147,31 +147,31 @@ int main(int argc, char **argv) {
 
 	server = stats_server_create(options.filename, loop);
 
-	if(server == NULL) {
+	if (server == NULL) {
 		stats_log("main: Unable to create stats_server");
 		return 1;
 	}
 
 	ts = tcpserver_create(loop, server);
-	if(ts == NULL) {
+	if (ts == NULL) {
 		stats_log("main: Unable to create tcpserver");
 		return 3;
 	}
 
 	us = udpserver_create(loop, server);
-	if(us == NULL) {
+	if (us == NULL) {
 		stats_log("main: Unable to create udpserver");
 		return 5;
 	}
 
 	for (l = options.binds; l != NULL; l = l->next) {
 		address = l->data;
-		if(tcpserver_bind(ts, address, "8125", stats_connection, stats_recv) != 0) {
+		if (tcpserver_bind(ts, address, "8125", stats_connection, stats_recv) != 0) {
 			stats_log("main: Unable to bind tcp %s", address);
 			return 6;
 		}
 
-		if(udpserver_bind(us, address, "8125", stats_udp_recv) != 0) {
+		if (udpserver_bind(us, address, "8125", stats_udp_recv) != 0) {
 			stats_log("main: Unable to bind udp %s", address);
 			return 7;
 		}
