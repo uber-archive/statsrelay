@@ -1,6 +1,7 @@
 *.o
 *.swp
-statsrelay
+src/statsrelay
+src/stathasher
 test_stats
 test/devnull
 Makefile

@@ -3,6 +3,7 @@
 
 #include <glib.h>
 #include <ev.h>
+#include <stdint.h>
 #include "ketama.h"
 
 #define BACKEND_RETRY_TIMEOUT 5

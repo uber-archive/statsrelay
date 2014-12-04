@@ -1,4 +1,4 @@
-AC_INIT([statsrelay], [1.1.7])
+AC_INIT([statsrelay], [1.1.8])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC
 AC_USE_SYSTEM_EXTENSIONS
