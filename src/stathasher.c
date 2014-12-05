@@ -53,12 +53,6 @@ void print_help(const char *argv0) {
 		argv0);
 }
 
-void print_ip(stats_server_t *server, char *key) {
-    mcs *ks;
-    ks = ketama_get_server(key, server->kc);
-    printf("%s\n", ks->ip);
-}
-
 int main(int argc, char **argv) {
 	statsrelay_options_t options;
 	int option_index = 0;
