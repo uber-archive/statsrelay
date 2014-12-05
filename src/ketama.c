@@ -39,7 +39,7 @@
 #include <math.h>           /* floor & floorf                       */
 #include <sys/stat.h>       /* various type definitions             */
 #include <sys/shm.h>        /* shared memory functions and structs  */
-#include <sys/types.h>        
+#include <sys/types.h>
 #ifdef DEBUG
 #include <syslog.h>
 #endif
@@ -231,45 +231,50 @@ static serverinfo
 read_server_line( char* line )
 {
     char* delim = "\t ";
-    size_t len;
+    size_t numtokens;
     serverinfo server;
+    char *tok = NULL;
+    char *tokens[3];
+
+    char *tag = NULL;
+    char *addr = NULL;
+    unsigned long mem = 0;
+
     server.memory = 0;
     memset(server.addr, '\0', 22);
+    memset(server.tag, '\0', 22);
 
-    char* tok = strtok( line, delim );
-    if ( ( strlen( tok ) - 1 ) < 23 )
-    {
-        char* mem = 0;
-        char* endptr = 0;
+    for (int i=0; i<3; i++) {
+        tokens[i] = NULL;
+    }
 
-        strncpy( server.addr, tok, strlen( tok ) );
-        server.addr[ strlen( tok ) ] = '\0';
-
-        tok = strtok( 0, delim );
-        /* We do not check for a NULL return earlier because strtok will
-         * always return at least the first token; hence never return NULL.
-         */
-        if ( tok == 0 )
-        {
-            strcpy( k_error, "Unable to find delimiter" );
-            server.memory = 0;
+    numtokens = 0;
+    for (tok = strtok(line, delim); tok != NULL ; tok = strtok('\0', delim)) {
+        tokens[numtokens] = tok;
+        numtokens++;
+        if (numtokens >=3 ) {
+            break;
         }
-        else
-        {
-            len = strlen(tok);
-            mem = (char *)malloc(len + 1);
-            memcpy( mem, tok, len + 1);
+    }
 
-            errno = 0;
-            server.memory = strtol( mem, &endptr, 10 );
-            if ( errno == ERANGE || endptr == mem )
-            {
-                strcpy( k_error, "Invalid memory value" );
-                server.memory = 0;
-            }
+    if (numtokens == 1) {
+        tag = tokens[0];
+        addr = tokens[0];
+        mem = 0;
+    } else if (numtokens == 2) {
+        tag = tokens[0];
+        addr = tokens[0];
+        mem = strtol(tokens[1], NULL, 10);
+    } else if (numtokens == 3) {
+        tag = tokens[0];
+        addr = tokens[1];
+        mem = strtol(tokens[2], NULL, 10);
+    }
 
-            free( mem );
-        }
+    if (strlen(tag)-1 < 23 && strlen(addr)-1 < 23) {
+        strncpy(server.tag, tag, strlen(tag));
+        strncpy(server.addr, addr, strlen(addr));
+        server.memory = mem;
     }
 
     return server;
@@ -303,7 +308,7 @@ read_server_definitions( char* filename, unsigned int* count, unsigned long* mem
             continue;
 
         serverinfo server = read_server_line( sline );
-        if ( server.memory > 0 && strlen( server.addr ) )
+        if ( server.memory > 0 && strlen( server.tag ) )
         {
             slist = (serverinfo*)realloc( slist, sizeof( serverinfo ) * ( numservers + 1 ) );
             memcpy( &slist[numservers], &server, sizeof( serverinfo ) );
@@ -438,8 +443,8 @@ ketama_create_continuum( key_t key, char* filename )
 #ifdef DEBUG
         int hpct = floorf( pct * 100.0 );
 
-        syslog( LOG_INFO, "Server no. %d: %s (mem: %lu = %u%% or %d of %d)\n",
-            i, slist[i].addr, slist[i].memory, hpct, ks, numservers * 40 );
+        syslog( LOG_INFO, "Server no. %d: [%s] %s (mem: %lu = %u%% or %d of %d)\n",
+            i, slist[i].tag, slist[i].addr, slist[i].memory, hpct, ks, numservers * 40 );
 #endif
 
         for( k = 0; k < ks; k++ )
@@ -448,7 +453,7 @@ ketama_create_continuum( key_t key, char* filename )
             char ss[30];
             unsigned char digest[16];
 
-            sprintf( ss, "%s-%d", slist[i].addr, k );
+            sprintf( ss, "%s-%d", slist[i].tag, k );
             ketama_md5_digest( ss, digest );
 
             /* Use successive 4-bytes from hash as numbers
