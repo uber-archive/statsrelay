@@ -18,7 +18,7 @@ void stats_log(const char *format, ...) {
 	vsnprintf(buffer, sizeof(buffer), format, args);
 	va_end(args);
 
-	if(g_verbose == 1) {
+	if (g_verbose == 1) {
 		va_start(args, format);
 		vfprintf(stderr, format, args);
 		va_end(args);

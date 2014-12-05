@@ -70,7 +70,7 @@ char *buffer_tail(buffer_t *b)
 char *myrealloc(char *p, size_t old, size_t new)
 {
     char *pnew = malloc(new);
-	if(pnew == NULL) {
+	if (pnew == NULL) {
 		return NULL;
 	}
     memcpy(pnew, p, old);
@@ -125,7 +125,7 @@ int buffer_set(buffer_t *b, const char *data, size_t size)
 
 int buffer_realign(buffer_t *b)
 {
-    if(b->tail != b->head) {
+    if (b->tail != b->head) {
         memmove(b->ptr, b->head, b->tail - b->head);
     }
     /* do not switch the order of the following two statements */

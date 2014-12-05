@@ -1,5 +1,5 @@
-AC_INIT([statsrelay], [1.1.8])
-AM_INIT_AUTOMAKE([-Wall -Werror foreign])
+AC_INIT([statsrelay], [1.2.0])
+AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_PROG_CC
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADERS([config.h])

@@ -20,7 +20,7 @@
 
 int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *context, char *data, size_t len) {
 	// default is to do nothing
-	if(event == EVENT_RECV) {
+	if (event == EVENT_RECV) {
 		free(data);
 	}
 	return 0;
@@ -91,17 +91,17 @@ void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int event
 	ssize_t len;
 	char *buf;
 
-	if(!(events & EV_READ)) {
+	if (!(events & EV_READ)) {
 		return;
 	}
 
 	buf = malloc(TCPCLIENT_RECV_BUFFER);
-	if(buf == NULL) {
+	if (buf == NULL) {
 		stats_log("tcpclient[%s]: Unable to allocate memory for receive buffer", client->name);
 		return;
 	}
 	len = recv(client->sd, buf, TCPCLIENT_RECV_BUFFER, 0);
-	if(len < 0) {
+	if (len < 0) {
 		stats_log("tcpclient[%s]: Error from recv: %s", client->name, strerror(errno));
 		ev_io_stop(client->loop, &client->read_watcher);
 		ev_io_stop(client->loop, &client->write_watcher);
@@ -113,7 +113,7 @@ void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int event
 		return;
 	}
 
-	if(len == 0) {
+	if (len == 0) {
 		stats_log("tcpclient[%s]: Server closed connection", client->name);
 		ev_io_stop(client->loop, &client->read_watcher);
 		ev_io_stop(client->loop, &client->write_watcher);
@@ -133,15 +133,15 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 	buffer_t *sendq;
 	ssize_t len;
 
-	if(!(events & EV_WRITE)) {
+	if (!(events & EV_WRITE)) {
 		return;
 	}
 
 	sendq = &client->send_queue;
 	len = buffer_datacount(sendq);
-	if(len > 0) {
+	if (len > 0) {
 		len = send(client->sd, sendq->head, len, 0);
-		if(len < 0) {
+		if (len < 0) {
 			stats_log("tcpclient[%s]: Error from send: %s", client->name, strerror(errno));
 			ev_io_stop(client->loop, &client->write_watcher);
 			ev_io_stop(client->loop, &client->read_watcher);
@@ -153,7 +153,7 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 		}
 
 		client->callback_sent(client, EVENT_SENT, client->callback_context, sendq->head, (size_t)len);
-		if(buffer_consume(sendq, len) != 0) {
+		if (buffer_consume(sendq, len) != 0) {
 			stats_log("tcpclient[%s]: Unable to consume send queue", client->name);
 			return;
 		}
@@ -171,12 +171,12 @@ void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int events
 	ev_timer_stop(loop, &client->timeout_watcher);
 	ev_io_stop(loop, &client->connect_watcher);
 
-	if(getsockopt(client->sd, SOL_SOCKET, SO_ERROR, &err, &len) != 0) {
+	if (getsockopt(client->sd, SOL_SOCKET, SO_ERROR, &err, &len) != 0) {
 		stats_log("tcpclient[%s]: Unable to get socket error state: %s", client->name, strerror(errno));
 		return;
 	}
 
-	if((events & EV_ERROR) || err) {
+	if ((events & EV_ERROR) || err) {
 		stats_log("tcpclient[%s]: Connect failed: %s", client->name, strerror(err));
 		close(client->sd);
 		client->last_error = time(NULL);
@@ -202,14 +202,14 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 	struct addrinfo *addr;
 	int sd;
 
-	if(client->state == STATE_CONNECTED || client->state == STATE_CONNECTING) {
+	if (client->state == STATE_CONNECTED || client->state == STATE_CONNECTING) {
 		// Already connected, do nothing
 		return 1;
 	}
 
-	if(client->state == STATE_BACKOFF) {
+	if (client->state == STATE_BACKOFF) {
 		// If backoff timer has expired, change to STATE_INIT and call recursively
-		if( (time(NULL) - client->last_error) > TCPCLIENT_RETRY_TIMEOUT ) {
+		if ( (time(NULL) - client->last_error) > TCPCLIENT_RETRY_TIMEOUT ) {
 			tcpclient_set_state(client, STATE_INIT);
 			return tcpclient_connect(client, host, port, protocol);
 		}else{
@@ -217,12 +217,12 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 		}
 	}
 
-	if(client->state == STATE_INIT) {
+	if (client->state == STATE_INIT) {
 		// Resolve address, create socket, set nonblocking, setup callbacks, fire connect
-		if(client->addr == NULL) {
+		if (client->addr == NULL) {
 			// We only know about tcp and udp, so if we get something unexpected just
 			// default to tcp
-			if(protocol != NULL && strncmp(protocol, "udp", 3) == 0) {
+			if (protocol != NULL && strncmp(protocol, "udp", 3) == 0) {
 				client->socktype = SOCK_DGRAM;
 			}else{
 				protocol = "tcp";
@@ -232,7 +232,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 			hints.ai_family = AF_UNSPEC;
 			hints.ai_socktype = client->socktype;
 			hints.ai_flags = AI_PASSIVE;
-			if(getaddrinfo(host, port, &hints, &addr) != 0) {
+			if (getaddrinfo(host, port, &hints, &addr) != 0) {
 				stats_log("tcpclient: Error resolving backend address %s: %s", host, gai_strerror(errno));
 				client->last_error = time(NULL);
 				tcpclient_set_state(client, STATE_BACKOFF);
@@ -244,7 +244,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 			char hostname[TCPCLIENT_NAME_LEN - 8];
 			char servicename[8];
 			
-			if(getnameinfo(client->addr->ai_addr, client->addr->ai_addrlen, hostname, (TCPCLIENT_NAME_LEN - 8), servicename, 8, NI_NUMERICHOST) != 0) {
+			if (getnameinfo(client->addr->ai_addr, client->addr->ai_addrlen, hostname, (TCPCLIENT_NAME_LEN - 8), servicename, 8, NI_NUMERICHOST) != 0) {
 				snprintf(client->name, TCPCLIENT_NAME_LEN, "%s/%s/%s", host, port, protocol);
 				stats_log("tcpclient: Unable to format backend address for logging, using config value %s (%s)", client->name, gai_strerror(errno));
 			}else{
@@ -254,7 +254,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 			addr = client->addr;
 		}
 
-		if((sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol)) < 0) {
+		if ((sd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol)) < 0) {
 			stats_log("tcpclient[%s]: Unable to create socket: %s", client->name, strerror(errno));
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
@@ -263,7 +263,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 		}
 		client->sd = sd;
 
-		if(fcntl(sd, F_SETFL, (fcntl(sd, F_GETFL) | O_NONBLOCK)) != 0) {
+		if (fcntl(sd, F_SETFL, (fcntl(sd, F_GETFL) | O_NONBLOCK)) != 0) {
 			stats_log("tcpclient[%s]: Unable to set socket to non-blocking: %s", client->name, strerror(errno));
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
@@ -279,7 +279,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 		ev_timer_set(&client->timeout_watcher, TCPCLIENT_CONNECT_TIMEOUT, 0);
 		ev_timer_start(client->loop, &client->timeout_watcher);
 
-		if(connect(sd, addr->ai_addr, addr->ai_addrlen) != 0 && errno != EINPROGRESS) {
+		if (connect(sd, addr->ai_addr, addr->ai_addrlen) != 0 && errno != EINPROGRESS) {
 			stats_log("tcpclient[%s]: Unable to connect: %s", client->name, strerror(errno));
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
@@ -301,7 +301,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 	buffer_t *sendq = &client->send_queue;
 
-	if(client->addr == NULL) {
+	if (client->addr == NULL) {
 		stats_log("tcpclient[%s]: Cannot send before connect!", client->name);
 		return 1;
 	}else{
@@ -310,8 +310,8 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 		tcpclient_connect(client, NULL, NULL, NULL);
 	}
 
-	if(buffer_datacount(&client->send_queue) > client->max_send_queue) {
-		if(client->failing == 0) {
+	if (buffer_datacount(&client->send_queue) > client->max_send_queue) {
+		if (client->failing == 0) {
 			stats_log("tcpclient[%s]: Send queue is full, dropping data", client->name);
 			client->failing = 1;
 		}
@@ -321,14 +321,14 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 		client->failing = 0;
 	}
 
-	if(buffer_spacecount(sendq) < len) {
-		if(buffer_realign(sendq) != 0) {
+	if (buffer_spacecount(sendq) < len) {
+		if (buffer_realign(sendq) != 0) {
 			stats_log("tcpclient[%s]: Unable to realign send queue", client->name);
 			return 3;
 		}
 	}
-	while(buffer_spacecount(sendq) < len) {
-		if(buffer_expand(sendq) != 0) {
+	while (buffer_spacecount(sendq) < len) {
+		if (buffer_expand(sendq) != 0) {
 			stats_log("tcpclient[%s]: Unable to allocate additional memory for send queue, dropping data", client->name);
 			return 4;
 		}
@@ -336,7 +336,7 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 	memcpy(buffer_tail(sendq), buf, len);
 	buffer_produced(sendq, len);
 
-	if(client->state == STATE_CONNECTED) {
+	if (client->state == STATE_CONNECTED) {
 		ev_io_start(client->loop, &client->write_watcher);
 	}
 	return 0;
@@ -349,7 +349,7 @@ void tcpclient_destroy(tcpclient_t *client, int drop_queue) {
 	ev_io_stop(client->loop, &client->write_watcher);
 
 	buffer_destroy(&client->send_queue);
-	if(client->addr != NULL) {
+	if (client->addr != NULL) {
 		freeaddrinfo(client->addr);
 	}
 }

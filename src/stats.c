@@ -69,7 +69,7 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 	stats_server_t *server;
 
 	server = malloc(sizeof(stats_server_t));
-	if(server == NULL) {
+	if (server == NULL) {
 		stats_log("stats: Unable to allocate memory");
 		free(server);
 		return NULL;
@@ -80,7 +80,7 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 	server->ketama_cache = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
 
 	server->ketama_filename = filename;
-	if(ketama_roll(&server->kc, filename) == 0) {
+	if (ketama_roll(&server->kc, filename) == 0) {
 		stats_log(ketama_error());
 		stats_log("stats: Unable to load ketama config from %s", filename);
 		free(server);
@@ -117,7 +117,7 @@ void stats_kill_all_backends(stats_server_t *server) {
 	gpointer key, value;
 
 	g_hash_table_iter_init(&iter, server->backends);
-	while(g_hash_table_iter_next(&iter, &key, &value)) {
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		stats_kill_backend(server, value);
 		free(value);
 		g_hash_table_iter_remove(&iter);
@@ -125,7 +125,7 @@ void stats_kill_all_backends(stats_server_t *server) {
 }
 
 void stats_server_reload(stats_server_t *server) {
-	if(ketama_roll(&server->kc, server->ketama_filename) == 0) {
+	if (ketama_roll(&server->kc, server->ketama_filename) == 0) {
 		stats_log(ketama_error());
 		stats_log("stats: Unable to reload ketama config from %s", server->ketama_filename);
 	}
@@ -140,12 +140,12 @@ void *stats_connection(int sd, void *ctx) {
 
 	//stats_log("stats: Accepted connection on socket %i", sd);
 	session = (stats_session_t *)malloc(sizeof(stats_session_t));
-	if(session == NULL) {
+	if (session == NULL) {
 		stats_log("stats: Unable to allocate memory");
 		return NULL;
 	}
 
-	if(buffer_init(&session->buffer) != 0) {
+	if (buffer_init(&session->buffer) != 0) {
 		stats_log("stats: Unable to initialize buffer");
 		free(session);
 		return NULL;
@@ -177,7 +177,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 	mcs *ks;
 
 	backend = g_hash_table_lookup(server->ketama_cache, key);
-	if(backend != NULL) {
+	if (backend != NULL) {
 		return backend;
 	}
 
@@ -186,9 +186,9 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 	iplen = sizeof(ks->ip);
 
 	backend = g_hash_table_lookup(server->backends, ip);
-	if(backend == NULL) {
+	if (backend == NULL) {
 		backend = malloc(sizeof(stats_backend_t));
-		if(backend == NULL) {
+		if (backend == NULL) {
 			stats_log("stats: Cannot allocate memory for backend connection");
 			return NULL;
 		}
@@ -199,7 +199,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		backend->dropped_lines = 0;
 		backend->failing = 0;
 
-		if(tcpclient_init(&backend->client, server->loop, (void *)backend, server->max_send_queue) != 0) {
+		if (tcpclient_init(&backend->client, server->loop, (void *)backend, server->max_send_queue) != 0) {
 			stats_log("stats: Unable to initialize tcpclient");
 			free(backend);
 			return NULL;
@@ -209,7 +209,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 
 		// Make a copy of the address because it's immutableish
 		address = malloc(iplen);
-		if(address == NULL) {
+		if (address == NULL) {
 			stats_log("stats: Unable to allocate memory for backend address");
 			return NULL;
 		}
@@ -217,7 +217,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		backend->key = address;
 
 		port = memchr(address, ':', iplen);
-		if(port == NULL) {
+		if (port == NULL) {
 			stats_log("stats: Unable to parse server address from config: %s", ip);
 			free(address);
 			return NULL;
@@ -226,7 +226,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		port++;
 
 		protocol = memchr(port, ':', (port - address));
-		if(protocol != NULL) {
+		if (protocol != NULL) {
 			protocol[0] = '\0';
 			protocol++;
 		}else{
@@ -234,7 +234,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		}
 
 		ret = tcpclient_connect(&backend->client, address, port, protocol);
-		if(ret != 0) {
+		if (ret != 0) {
 			stats_log("stats: Error connecting to [%s]:%s (tcpclient_connect returned %i)", address, port, ret);
 			free(address);
 			return NULL;
@@ -260,12 +260,12 @@ int stats_validate_line(char *line, size_t len) {
 	start = line;
 	plen = len;
 	end = memchr(start, ':', plen);
-	if(end == NULL) {
+	if (end == NULL) {
 		stats_log("stats: Invalid line \"%s\" missing ':'", line);
 		return 1;
 	}
 
-	if((end - start) < 1) {
+	if ((end - start) < 1) {
 		stats_log("stats: Invalid line \"%s\" zero length key", line);
 		return 2;
 	}
@@ -275,7 +275,7 @@ int stats_validate_line(char *line, size_t len) {
 
 	c = end[0];
 	end[0] = '\0';
-	if((strtod(start, &err) == 0.0) && (err == start)) {
+	if ((strtod(start, &err) == 0.0) && (err == start)) {
 		end[0] = c;
 		stats_log("stats: Invalid line \"%s\" unable to parse value as double", line);
 		return 3;
@@ -283,7 +283,7 @@ int stats_validate_line(char *line, size_t len) {
 	end[0] = c;
 
 	end = memchr(start, '|', plen);
-	if(end == NULL) {
+	if (end == NULL) {
 		stats_log("stats: Invalid line \"%s\" missing '|'", line);
 		return 4;
 	}
@@ -292,40 +292,40 @@ int stats_validate_line(char *line, size_t len) {
 	plen = len - (start - line);
 
 	end = memchr(start, '|', plen);
-	if(end != NULL) {
+	if (end != NULL) {
 		c = end[0];
 		end[0] = '\0';
 		plen = end - start;
 	}
 
 	valid = 0;
-	for(i = 0; i < valid_stat_types_len; i++) {
-		if(strlen(valid_stat_types[i]) != plen) {
+	for (i = 0; i < valid_stat_types_len; i++) {
+		if (strlen(valid_stat_types[i]) != plen) {
 			continue;
 		}
-		if(strncmp(start, valid_stat_types[i], plen) == 0) {
+		if (strncmp(start, valid_stat_types[i], plen) == 0) {
 			valid = 1;
 			break;
 		}
 	}
 
-	if(valid == 0) {
+	if (valid == 0) {
 		stats_log("stats: Invalid line \"%s\" unknown stat type \"%s\"", line, start);
 		return 7;
 	}
 
-	if(end != NULL) {
+	if (end != NULL) {
 		end[0] = c;
 		// end[0] is currently the second | char
 		// test if we have at least 1 char following it (@)
-		if((len - (end - line) > 1) && (end[1] == '@')) {
+		if ((len - (end - line) > 1) && (end[1] == '@')) {
 			start = end + 2;
 			plen = len - (start - line);
-			if(plen == 0) {
+			if (plen == 0) {
 				stats_log("stats: Invalid line \"%s\" @ sample with no rate", line);
 				return 5;
 			}
-			if((strtod(start, &err) == 0.0) && err == start) {
+			if ((strtod(start, &err) == 0.0) && err == start) {
 				stats_log("stats: Invalid line \"%s\" invalid sample rate", line);
 				return 6;
 			}
@@ -344,12 +344,12 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 
 	line[len] = '\0';
 
-	if(ss->validate_lines == 1 && stats_validate_line(line, len) != 0) {
+	if (ss->validate_lines == 1 && stats_validate_line(line, len) != 0) {
 		return 1;
 	}
 
 	keyend = memchr(line, ':', len);
-	if(keyend == NULL) {
+	if (keyend == NULL) {
 		ss->malformed_lines++;
 		stats_log("stats: dropping malformed line: \"%s\"", line);
 		return 1;
@@ -361,13 +361,13 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 	keyend[0] = ':';
 	line[len] = '\n';
 
-	if(backend == NULL) {
+	if (backend == NULL) {
 		return 1;
 	}
 
-	if(tcpclient_sendall(&backend->client, line, len+1) != 0) {
+	if (tcpclient_sendall(&backend->client, line, len+1) != 0) {
 		backend->dropped_lines++;
-		if(backend->failing == 0) {
+		if (backend->failing == 0) {
 			stats_log("stats: Error sending to backend %s", backend->key);
 			backend->failing = 1;
 		}
@@ -417,7 +417,7 @@ void stats_send_statistics(stats_session_t *session) {
 		session->server->malformed_lines));
 
 	g_hash_table_iter_init(&iter, session->server->backends);
-	while(g_hash_table_iter_next(&iter, &key, &value)) {
+	while (g_hash_table_iter_next(&iter, &key, &value)) {
 		backend = (stats_backend_t *)value;
 
 		buffer_produced(response,
@@ -449,14 +449,14 @@ void stats_send_statistics(stats_session_t *session) {
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response), "\n"));
 
-	while(buffer_datacount(response) > 0) {
+	while (buffer_datacount(response) > 0) {
 		bytes_sent = send(session->sd, buffer_head(response), buffer_datacount(response), 0);
-		if(bytes_sent < 0) {
+		if (bytes_sent < 0) {
 			stats_log("stats: Error sending status response: %s", strerror(errno));
 			break;
 		}
 
-		if(bytes_sent == 0) {
+		if (bytes_sent == 0) {
 			stats_log("stats: Error sending status response: Client closed connection");
 			break;
 		}
@@ -470,17 +470,17 @@ int stats_process_lines(stats_session_t *session) {
 	char *head, *tail;
 	size_t len;
 
-	while(buffer_datacount(&session->buffer) > 0) {
+	while (buffer_datacount(&session->buffer) > 0) {
 		head = (char *)buffer_head(&session->buffer);
 		tail = memchr(head, '\n', buffer_datacount(&session->buffer));
 
-		if(tail == NULL) {
+		if (tail == NULL) {
 			break;
 		}
 
 		len = tail - head;
 
-		if(len >= 6 && memcmp(head, "status\n", 7) == 0) {
+		if (len >= 6 && memcmp(head, "status\n", 7) == 0) {
 			stats_send_statistics(session);
 		}else{
 			stats_relay_line(head, len, session->server);
@@ -505,11 +505,11 @@ int stats_recv(int sd, void *data, void *ctx) {
 	// First we try to realign the buffer (memmove so that head and ptr match)
 	// If that fails, we double the size of the buffer
 	space = buffer_spacecount(&session->buffer);
-	if(space == 0) {
+	if (space == 0) {
 		buffer_realign(&session->buffer);
 		space = buffer_spacecount(&session->buffer);
-		if(space == 0) {
-			if(buffer_expand(&session->buffer) != 0) {
+		if (space == 0) {
+			if (buffer_expand(&session->buffer) != 0) {
 				stats_log("stats: Unable to expand buffer, aborting");
 				stats_session_destroy(session);
 				return 1;
@@ -519,13 +519,13 @@ int stats_recv(int sd, void *data, void *ctx) {
 	}
 
 	bytes_read = recv(sd, buffer_tail(&session->buffer), space, 0);
-	if(bytes_read < 0) {
+	if (bytes_read < 0) {
 		stats_log("stats: Error receiving from socket: %s", strerror(errno));
 		stats_session_destroy(session);
 		return 2;
 	}
 
-	if(bytes_read == 0) {
+	if (bytes_read == 0) {
 		//stats_log("stats: Client closed connection");
 		stats_session_destroy(session);
 		return 3;
@@ -533,13 +533,13 @@ int stats_recv(int sd, void *data, void *ctx) {
 
 	session->server->bytes_recv_tcp += bytes_read;
 
-	if(buffer_produced(&session->buffer, bytes_read) != 0) {
+	if (buffer_produced(&session->buffer, bytes_read) != 0) {
 		stats_log("stats: Unable to produce buffer by %i bytes, aborting", bytes_read);
 		stats_session_destroy(session);
 		return 4;
 	}
 
-	if(stats_process_lines(session) != 0) {
+	if (stats_process_lines(session) != 0) {
 		stats_log("stats: Invalid line processed, closing connection");
 		stats_session_destroy(session);
 		return 5;
@@ -559,14 +559,14 @@ int stats_udp_recv(int sd, void *data) {
 
 	bytes_read = read(sd, buffer_head(buffer), MAX_UDP_LENGTH);
 
-	if(bytes_read == 0) {
+	if (bytes_read == 0) {
 		delete_buffer(buffer);
 		stats_log("stats: Got zero-length UDP payload. That's weird.");
 		return 1;
 	}
 
-	if(bytes_read < 0) {
-		if(errno == EAGAIN) {
+	if (bytes_read < 0) {
+		if (errno == EAGAIN) {
 			delete_buffer(buffer);
 			return 0;
 		}else{
@@ -579,16 +579,16 @@ int stats_udp_recv(int sd, void *data) {
 	buffer_produced(buffer, bytes_read);
 	ss->bytes_recv_udp += bytes_read;
 
-	while(buffer_datacount(buffer) > 0) {
+	while (buffer_datacount(buffer) > 0) {
 		head = (char *)buffer_head(buffer);
 		tail = memchr(head, '\n', buffer_datacount(buffer));
 		len = tail - head;
 
-		if(tail == NULL) {
+		if (tail == NULL) {
 			break;
 		}
 
-		if(stats_relay_line(head, len, ss) != 0) {
+		if (stats_relay_line(head, len, ss) != 0) {
 			delete_buffer(buffer);
 			return 3;
 		}
@@ -596,8 +596,8 @@ int stats_udp_recv(int sd, void *data) {
 	}
 
 	len = buffer_datacount(buffer);
-	if(len > 0) {
-		if(stats_relay_line(buffer_head(buffer), len, ss) != 0) {
+	if (len > 0) {
+		if (stats_relay_line(buffer_head(buffer), len, ss) != 0) {
 			delete_buffer(buffer);
 			return 4;
 		}
