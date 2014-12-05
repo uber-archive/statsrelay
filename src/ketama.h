@@ -57,6 +57,7 @@ typedef struct
 
 typedef struct
 {
+    char tag[22];
     char addr[22];
     unsigned long memory;
 } serverinfo;
