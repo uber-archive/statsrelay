@@ -157,7 +157,7 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 			stats_log("tcpclient[%s]: Unable to consume send queue", client->name);
 			return;
 		}
-	}else{
+	} else {
 		ev_io_stop(client->loop, &client->write_watcher);
 	}
 }
@@ -212,7 +212,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 		if ( (time(NULL) - client->last_error) > TCPCLIENT_RETRY_TIMEOUT ) {
 			tcpclient_set_state(client, STATE_INIT);
 			return tcpclient_connect(client, host, port, protocol);
-		}else{
+		} else {
 			return 2;
 		}
 	}
@@ -224,7 +224,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 			// default to tcp
 			if (protocol != NULL && strncmp(protocol, "udp", 3) == 0) {
 				client->socktype = SOCK_DGRAM;
-			}else{
+			} else {
 				protocol = "tcp";
 				client->socktype = SOCK_STREAM;
 			}
@@ -247,10 +247,10 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 			if (getnameinfo(client->addr->ai_addr, client->addr->ai_addrlen, hostname, (TCPCLIENT_NAME_LEN - 8), servicename, 8, NI_NUMERICHOST) != 0) {
 				snprintf(client->name, TCPCLIENT_NAME_LEN, "%s/%s/%s", host, port, protocol);
 				stats_log("tcpclient: Unable to format backend address for logging, using config value %s (%s)", client->name, gai_strerror(errno));
-			}else{
+			} else {
 				snprintf(client->name, TCPCLIENT_NAME_LEN, "%s/%s/%s", hostname, servicename, protocol);
 			}
-		}else{
+		} else {
 			addr = client->addr;
 		}
 
@@ -304,7 +304,7 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 	if (client->addr == NULL) {
 		stats_log("tcpclient[%s]: Cannot send before connect!", client->name);
 		return 1;
-	}else{
+	} else {
 		// Does nothing if we're already connected, triggers a reconnect if backoff
 		// has expired.
 		tcpclient_connect(client, NULL, NULL, NULL);
@@ -316,7 +316,7 @@ int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
 			client->failing = 1;
 		}
 		return 2;
-	}else{
+	} else {
 		// recovered
 		client->failing = 0;
 	}

@@ -83,7 +83,7 @@ udplistener_t *udplistener_create(udpserver_t *server, struct addrinfo *addr, in
 		struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr->ai_addr;
 		ip = &(ipv4->sin_addr);
 		port = ntohs(ipv4->sin_port);
-	}else{
+	} else {
 		struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)addr->ai_addr;
 		ip = &(ipv6->sin6_addr);
 		port = ntohs(ipv6->sin6_port);
@@ -154,7 +154,7 @@ int udpserver_bind(udpserver_t *server, char *address_and_port, char *default_po
 	ptr = strrchr(address_and_port, ':');
 	if (ptr == NULL) {
 		port = default_port;
-	}else{
+	} else {
 		ptr[0] = '\0';
 		port = ptr + 1;
 	}
