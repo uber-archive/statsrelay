@@ -70,13 +70,7 @@ int tcpclient_init(tcpclient_t *client,
 		void *callback_connect,
 		uint64_t max_send_queue);
 
-void tcpclient_set_connect_callback(tcpclient_t *client,
-		tcpclient_callback callback);
 void tcpclient_set_sent_callback(tcpclient_t *client,
-		tcpclient_callback callback);
-void tcpclient_set_recv_callback(tcpclient_t *client,
-		tcpclient_callback callback);
-void tcpclient_set_error_callback(tcpclient_t *client,
 		tcpclient_callback callback);
 
 int tcpclient_connect(tcpclient_t *client,

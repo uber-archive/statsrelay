@@ -18,7 +18,7 @@
 #include <ev.h>
 
 
-int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *context, char *data, size_t len) {
+static int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *context, char *data, size_t len) {
 	// default is to do nothing
 	if (event == EVENT_RECV) {
 		free(data);
@@ -26,7 +26,7 @@ int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *conte
 	return 0;
 }
 
-void tcpclient_set_state(tcpclient_t *client, enum tcpclient_state state) {
+static void tcpclient_set_state(tcpclient_t *client, enum tcpclient_state state) {
 	static const char *tcpclient_state_name[] = {
 		    "INIT", "CONNECTING", "BACKOFF", "CONNECTED", "TERMINATED"
 	};
@@ -37,7 +37,7 @@ void tcpclient_set_state(tcpclient_t *client, enum tcpclient_state state) {
 	client->state = state;
 }
 
-void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *watcher, int events) {
+static void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *watcher, int events) {
 	tcpclient_t *client = (tcpclient_t *)watcher->data;
 	ev_io_stop(loop, &client->connect_watcher);
 
@@ -70,23 +70,11 @@ int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_con
 	return 0;
 }
 
-void tcpclient_set_connect_callback(tcpclient_t *client, tcpclient_callback callback) {
-	client->callback_connect = callback;
-}
-
 void tcpclient_set_sent_callback(tcpclient_t *client, tcpclient_callback callback) {
 	client->callback_sent = callback;
 }
 
-void tcpclient_set_recv_callback(tcpclient_t *client, tcpclient_callback callback) {
-	client->callback_recv = callback;
-}
-
-void tcpclient_set_error_callback(tcpclient_t *client, tcpclient_callback callback) {
-	client->callback_error = callback;
-}
-
-void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
+static void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
 	tcpclient_t *client = (tcpclient_t *)watcher->data;
 	ssize_t len;
 	char *buf;
@@ -128,7 +116,7 @@ void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, int event
 }
 
 
-void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
+static void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
 	tcpclient_t *client = (tcpclient_t *)watcher->data;
 	buffer_t *sendq;
 	ssize_t len;
@@ -162,7 +150,7 @@ void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int even
 	}
 }
 
-void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int events) {
+static void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int events) {
 	tcpclient_t *client = (tcpclient_t *)watcher->data;
 	int err;
 	socklen_t len = sizeof(err);
