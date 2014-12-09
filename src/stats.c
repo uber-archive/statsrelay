@@ -229,7 +229,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		if (protocol != NULL) {
 			protocol[0] = '\0';
 			protocol++;
-		}else{
+		} else {
 			protocol = "tcp";
 		}
 
@@ -329,7 +329,7 @@ int stats_validate_line(char *line, size_t len) {
 				stats_log("stats: Invalid line \"%s\" invalid sample rate", line);
 				return 6;
 			}
-		}else{
+		} else {
 			stats_log("stats: Invalid line \"%s\" no @ sample rate specifier", line);
 			return 8;
 		}
@@ -372,7 +372,7 @@ int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
 			backend->failing = 1;
 		}
 		return 2;
-	}else{
+	} else {
 		backend->failing = 0;
 	}
 
@@ -482,7 +482,7 @@ int stats_process_lines(stats_session_t *session) {
 
 		if (len >= 6 && memcmp(head, "status\n", 7) == 0) {
 			stats_send_statistics(session);
-		}else{
+		} else {
 			stats_relay_line(head, len, session->server);
 		}
 		buffer_consume(&session->buffer, len + 1);	// Add 1 to include the '\n'
@@ -569,7 +569,7 @@ int stats_udp_recv(int sd, void *data) {
 		if (errno == EAGAIN) {
 			delete_buffer(buffer);
 			return 0;
-		}else{
+		} else {
 			delete_buffer(buffer);
 			stats_log("stats: Error calling recvfrom: %s", strerror(errno));
 			return 2;
