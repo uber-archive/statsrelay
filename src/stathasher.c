@@ -40,10 +40,10 @@ struct stats_server_t {
 	time_t last_reload;
 };
 
-stats_server_t *server = NULL;
+static stats_server_t *server = NULL;
 
 
-void print_help(const char *argv0) {
+static void print_help(const char *argv0) {
 	fprintf(stderr, "Usage: %s [options] [FILENAME]                         \n\
     --help                  Display this message                            \n\
     --verbose               Write log messages to stderr in addition to     \n\
