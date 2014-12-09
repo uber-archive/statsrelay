@@ -31,11 +31,14 @@ typedef struct statsrelay_options_t {
 	int validate_lines;
 } statsrelay_options_t;
 
-stats_server_t *server = NULL;
-tcpserver_t *ts = NULL;
-udpserver_t *us = NULL;
-struct ev_loop *loop = NULL;
+static stats_server_t *server = NULL;
+static tcpserver_t *ts = NULL;
+static udpserver_t *us = NULL;
+static struct ev_loop *loop = NULL;
 
+static const char default_port[] = "8125";
+static const char default_config[] = "/etc/statsrelay.conf";
+static const uint64_t default_max_send_queue = 134217728;
 
 void graceful_shutdown(struct ev_loop *loop, ev_signal *w, int revents) {
 	//stats_log("Received %s (signal %i), shutting down.", strsignal(signum), signum);
@@ -66,15 +69,15 @@ void print_help(const char *argv0) {
     --verbose               Write log messages to stderr in addition to     \n\
                             syslog                                          \n\
     --bind=address[:port]   Bind to the given address and port              \n\
-                            (default: *:8125)                               \n\
+                            (default: *:%s)                                 \n\
     --config=filename       Use the given ketama config file                \n\
-                            (default: /etc/statsrelay.conf)                 \n\
+                            (default: %s)                                   \n\
     --max-send-queue=BYTES  Limit each backend connection's send queue to   \n\
-                            the given size. (default: 134217728)            \n\
+                            the given size. (default: %llu)                 \n\
     --no-validation         Disable parsing of stat values. Relayed metrics \n\
                             may not actually be valid past the ':' character\n\
                             (default: validation is enabled)                \n",
-		argv0);
+		argv0, default_port, default_config, (unsigned long long) default_max_send_queue);
 }
 
 int main(int argc, char **argv) {
@@ -87,10 +90,13 @@ int main(int argc, char **argv) {
 	char c = 0;
 
 	options.binds = NULL;
-	options.filename = "/etc/statsrelay.conf";
 	options.verbose = 0;
-	options.max_send_queue = 134217728;
+	options.max_send_queue = default_max_send_queue;
 	options.validate_lines = 1;
+	if ((options.filename = strdup(default_config)) == NULL) {
+		fprintf(stderr, "main: failed to strdup(3)\n");
+		return 1;
+	}
 
 	stats_log(PACKAGE_STRING);
 
@@ -169,13 +175,13 @@ int main(int argc, char **argv) {
 
 	for (l = options.binds; l != NULL; l = l->next) {
 		address = l->data;
-		if (tcpserver_bind(ts, address, "8125", stats_connection, stats_recv) != 0) {
+		if (tcpserver_bind(ts, address, default_port, stats_connection, stats_recv) != 0) {
 			stats_log("main: Unable to bind tcp %s", address);
 			g_list_free_full(options.binds, free);
 			return 6;
 		}
 
-		if (udpserver_bind(us, address, "8125", stats_udp_recv) != 0) {
+		if (udpserver_bind(us, address, default_port, stats_udp_recv) != 0) {
 			stats_log("main: Unable to bind udp %s", address);
 			g_list_free_full(options.binds, free);
 			return 7;
