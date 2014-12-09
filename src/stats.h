@@ -1,17 +1,20 @@
-#ifndef STATS_H
-#define STATS_H
+#ifndef STATSRELAY_STATS_H
+#define STATSRELAY_STATS_H
 
 #include <glib.h>
 #include <ev.h>
 #include <stdint.h>
-#include "ketama.h"
 
-#define BACKEND_RETRY_TIMEOUT 5
-#define MAX_UDP_LENGTH 65536
+#include "protocol.h"
+#include "validate.h"
 
 typedef struct stats_server_t stats_server_t;
 
-stats_server_t *stats_server_create(char *filename, struct ev_loop *loop);
+stats_server_t *stats_server_create(
+		const char *filename,
+		struct ev_loop *loop,
+		protocol_parser_t parser,
+		validate_line_validator_t validator);
 void stats_set_max_send_queue(stats_server_t *server, uint64_t size);
 void stats_set_validate_lines(stats_server_t *server, int validate_lines);
 void stats_server_reload(stats_server_t *server);

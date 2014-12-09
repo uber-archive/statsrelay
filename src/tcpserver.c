@@ -128,7 +128,7 @@ static void tcplistener_accept_callback(struct ev_loop *loop, struct ev_io *watc
 		return;
 	}
 
-	listener = (tcplistener_t *)watcher->data;
+	listener = (tcplistener_t *) watcher->data;
 	session = tcpsession_create(listener);
 	if (session == NULL) {
 		stats_log("tcplistener: Unable to allocate tcpsession, not calling accept()");
@@ -157,13 +157,10 @@ static void tcplistener_accept_callback(struct ev_loop *loop, struct ev_io *watc
 
 tcpserver_t *tcpserver_create(struct ev_loop *loop, void *data) {
 	tcpserver_t *server;
-
-	server = (tcpserver_t *)malloc(sizeof(tcpserver_t));
-
+	server = (tcpserver_t *) malloc(sizeof(tcpserver_t));
 	server->loop = ev_default_loop(0);
 	server->listeners_len = 0;
 	server->data = data;
-
 	return server;
 }
 
@@ -316,9 +313,7 @@ int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char
 
 
 void tcpserver_destroy(tcpserver_t *server) {
-	int i;
-
-	for (i = 0; i < server->listeners_len; i++) {
+	for (int i = 0; i < server->listeners_len; i++) {
 		tcplistener_destroy(server, server->listeners[i]);
 	}
 	free(server);

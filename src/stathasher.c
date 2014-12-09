@@ -1,6 +1,7 @@
 #include "config.h"
-#include "stats.h"
+#include "ketama.h"
 #include "log.h"
+#include "stats.h"
 
 #include <signal.h>
 #include <string.h>
@@ -87,9 +88,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-
-
-	server = stats_server_create(options.filename, NULL);
+	server = stats_server_create(options.filename, NULL, NULL, NULL);
 
 	if (server == NULL) {
 		stats_log("main: Unable to create stats_server");

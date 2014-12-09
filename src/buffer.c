@@ -17,9 +17,12 @@
 
 int buffer_allocate(buffer_t *b, size_t size)
 {
-    b->size = size;;
+    b->size = size;
     b->ptr = (char *)malloc(b->size);
     if (!b->ptr) return -1;
+#ifdef SANITIZE_BUFFERS
+	memset(b->ptr, 0, size);
+#endif
     b->head = b->ptr;
     b->tail = b->ptr;
     return 0;

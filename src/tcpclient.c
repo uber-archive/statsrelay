@@ -30,7 +30,7 @@ static void tcpclient_set_state(tcpclient_t *client, enum tcpclient_state state)
 	static const char *tcpclient_state_name[] = {
 		    "INIT", "CONNECTING", "BACKOFF", "CONNECTED", "TERMINATED"
 	};
-	stats_log("tcpclient[%s]: State transition %s -> %s",
+	stats_debug_log("tcpclient[%s]: State transition %s -> %s",
 			client->name,
 			tcpclient_state_name[client->state],
 			tcpclient_state_name[state]);
@@ -185,7 +185,7 @@ static void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int
 	client->callback_connect(client, EVENT_CONNECTED, client->callback_context, NULL, 0);
 }
 
-int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protocol) {
+int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, const char *protocol) {
 	struct addrinfo hints;
 	struct addrinfo *addr;
 	int sd;
@@ -286,7 +286,7 @@ int tcpclient_connect(tcpclient_t *client, char *host, char *port, char *protoco
 	return 7;
 }
 
-int tcpclient_sendall(tcpclient_t *client, char *buf, size_t len) {
+int tcpclient_sendall(tcpclient_t *client, const char *buf, size_t len) {
 	buffer_t *sendq = &client->send_queue;
 
 	if (client->addr == NULL) {
