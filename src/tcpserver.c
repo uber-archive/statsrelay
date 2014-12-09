@@ -262,6 +262,11 @@ int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char
 	int err;
 
 	char *address = strdup(address_and_port);
+	if (address == NULL) {
+		stats_log("tcpserver: strdup(3) failed");
+		return 1;
+	}
+
 	char *ptr = strrchr(address, ':');
 	const char *port = ptr == NULL ? default_port : ptr + 1;
 
@@ -270,6 +275,7 @@ int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char
 	}
 
 	if (address[0] == '*') {
+		free(address);
 		address = NULL;
 	}
 

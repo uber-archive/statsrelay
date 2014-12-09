@@ -90,10 +90,13 @@ int main(int argc, char **argv) {
 	char c = 0;
 
 	options.binds = NULL;
-	options.filename = strdup(default_config);
 	options.verbose = 0;
 	options.max_send_queue = default_max_send_queue;
 	options.validate_lines = 1;
+	if ((options.filename = strdup(default_config)) == NULL) {
+		fprintf(stderr, "main: failed to strdup(3)\n");
+		return 1;
+	}
 
 	stats_log(PACKAGE_STRING);
 
