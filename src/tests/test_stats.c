@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
 	struct ev_loop *loop = ev_default_loop(0);
 
 	server = stats_server_create("tests/statsrelay_tcp.conf", loop);
-	if(server == NULL) {
+	if (server == NULL) {
 		return 1;
 	}
 

@@ -290,6 +290,7 @@ static serverinfo*
 read_server_definitions( char* filename, unsigned int* count, unsigned long* memory )
 {
     serverinfo* slist = 0;
+    serverinfo* new_slist;
     unsigned int lineno = 0;
     unsigned int numservers = 0;
     unsigned long memtotal = 0;
@@ -310,7 +311,15 @@ read_server_definitions( char* filename, unsigned int* count, unsigned long* mem
         serverinfo server = read_server_line( sline );
         if ( server.memory > 0 && strlen( server.tag ) )
         {
-            slist = (serverinfo*)realloc( slist, sizeof( serverinfo ) * ( numservers + 1 ) );
+            new_slist = (serverinfo*)realloc( slist, sizeof( serverinfo ) * ( numservers + 1 ) );
+            if(new_slist == NULL) {
+                *count = 1;
+                free( slist );
+                set_error( "Unable to realloc memory for serverinfo. %s (line %d in %s)", k_error, lineno, filename );
+                fclose( fi );
+                return 0;
+            }
+            slist = new_slist;
             memcpy( &slist[numservers], &server, sizeof( serverinfo ) );
             numservers++;
             memtotal += server.memory;
@@ -323,6 +332,7 @@ read_server_definitions( char* filename, unsigned int* count, unsigned long* mem
             *count = 1;
             free( slist );
             set_error( "%s (line %d in %s)", k_error, lineno, filename );
+            fclose( fi );
             return 0;
         }
     }

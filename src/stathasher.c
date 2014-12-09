@@ -40,10 +40,10 @@ struct stats_server_t {
 	time_t last_reload;
 };
 
-stats_server_t *server = NULL;
+static stats_server_t *server = NULL;
 
 
-void print_help(const char *argv0) {
+static void print_help(const char *argv0) {
 	fprintf(stderr, "Usage: %s [options] [FILENAME]                         \n\
     --help                  Display this message                            \n\
     --verbose               Write log messages to stderr in addition to     \n\
@@ -51,12 +51,6 @@ void print_help(const char *argv0) {
     --config=filename       Use the given ketama config file                \n\
                             (default: /etc/statsrelay.conf)                 \n",
 		argv0);
-}
-
-void print_ip(stats_server_t *server, char *key) {
-    mcs *ks;
-    ks = ketama_get_server(key, server->kc);
-    printf("%s\n", ks->ip);
 }
 
 int main(int argc, char **argv) {
