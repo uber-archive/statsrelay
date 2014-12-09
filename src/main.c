@@ -149,36 +149,31 @@ int main(int argc, char **argv) {
 
 	if (server == NULL) {
 		stats_log("main: Unable to create stats_server");
-		g_list_free_full(options.binds, free);
-		return 1;
+		goto err;
 	}
 
 	ts = tcpserver_create(loop, server);
 	if (ts == NULL) {
 		stats_log("main: Unable to create tcpserver");
-		g_list_free_full(options.binds, free);
-		return 3;
+		goto err;
 	}
 
 	us = udpserver_create(loop, server);
 	if (us == NULL) {
 		stats_log("main: Unable to create udpserver");
-		g_list_free_full(options.binds, free);
-		return 5;
+		goto err;
 	}
 
 	for (l = options.binds; l != NULL; l = l->next) {
 		address = l->data;
 		if (tcpserver_bind(ts, address, "8125", stats_connection, stats_recv) != 0) {
 			stats_log("main: Unable to bind tcp %s", address);
-			g_list_free_full(options.binds, free);
-			return 6;
+			goto err;
 		}
 
 		if (udpserver_bind(us, address, "8125", stats_udp_recv) != 0) {
 			stats_log("main: Unable to bind udp %s", address);
-			g_list_free_full(options.binds, free);
-			return 7;
+			goto err;
 		}
 	}
 
@@ -190,6 +185,12 @@ int main(int argc, char **argv) {
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);
 
+	stats_log_end();
 	g_list_free_full(options.binds, free);
 	return 0;
+
+err:
+	stats_log_end();
+	g_list_free_full(options.binds, free);
+	return 1;
 }

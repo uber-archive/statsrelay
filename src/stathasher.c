@@ -104,6 +104,7 @@ int main(int argc, char **argv) {
         input = fopen(argv[optind], "r");
         if (input == NULL) {
             printf("Could not open %s", argv[optind]);
+            stats_log_end();
             return 1;
         }
     }
@@ -116,5 +117,6 @@ int main(int argc, char **argv) {
         free(lineptr);
         lineptr = NULL;
     }
+	stats_log_end();
 	return 0;
 }
