@@ -261,7 +261,6 @@ stats_backend_t *stats_get_backend(stats_server_t *server, const char *key, size
 static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
 	if (ss->validate_lines && ss->validator != NULL) {
 		if (ss->validator(line, len) != 0) {
-			stats_log("stats: skipping invalid line");
 			return 1;
 		}
 	}
@@ -390,7 +389,7 @@ static int stats_process_lines(stats_session_t *session) {
 	char *head, *tail;
 	size_t len;
 
-	static char line_buffer[MAX_UDP_LENGTH];
+	static char line_buffer[MAX_UDP_LENGTH + 2];
 
 	while (1) {
 		size_t datasize = buffer_datacount(&session->buffer);
@@ -420,10 +419,8 @@ static int stats_process_lines(stats_session_t *session) {
 }
 
 void stats_session_destroy(stats_session_t *session) {
-	if (session != NULL) {
-		buffer_destroy(&session->buffer);
-		free(session);
-	}
+	buffer_destroy(&session->buffer);
+	free(session);
 }
 
 int stats_recv(int sd, void *data, void *ctx) {
@@ -488,7 +485,7 @@ int stats_udp_recv(int sd, void *data) {
 	char *head, *tail;
 	size_t len;
 
-	static char line_buffer[MAX_UDP_LENGTH];
+	static char line_buffer[MAX_UDP_LENGTH + 2];
 
 	buffer = create_buffer(MAX_UDP_LENGTH);
 

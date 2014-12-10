@@ -30,7 +30,7 @@ static void tcpclient_set_state(tcpclient_t *client, enum tcpclient_state state)
 	static const char *tcpclient_state_name[] = {
 		    "INIT", "CONNECTING", "BACKOFF", "CONNECTED", "TERMINATED"
 	};
-	stats_debug_log("tcpclient[%s]: State transition %s -> %s",
+	stats_log("tcpclient[%s]: State transition %s -> %s",
 			client->name,
 			tcpclient_state_name[client->state],
 			tcpclient_state_name[state]);

@@ -8,7 +8,7 @@
 //
 //   size_t parser(const char *instr, const size_t inlen);
 //
-// The first two paramters, instr and inlen specify a const pointer to a
+// The first two paramaters, instr and inlen specify a const pointer to a
 // character buffer, and that buffer's size. The function parser will then
 // parse this string and find the part of the string that refers to the hash
 // key.
