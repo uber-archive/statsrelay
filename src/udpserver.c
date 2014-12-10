@@ -182,6 +182,7 @@ int udpserver_bind(udpserver_t *server, const char *address_and_port, const char
 	for (p = addrs; p != NULL; p = p->ai_next) {
 		if (server->listeners_len >= MAX_UDP_HANDLERS) {
 			stats_log("udpserver: Unable to create more than %i UDP listeners", MAX_UDP_HANDLERS);
+			free(address);
 			freeaddrinfo(addrs);
 			return 1;
 		}
