@@ -393,7 +393,7 @@ static int stats_process_lines(stats_session_t *session) {
 
 	while (1) {
 		size_t datasize = buffer_datacount(&session->buffer);
-		if (datasize <= 0) {
+		if (datasize == 0) {
 			break;
 		}
 		head = (char *)buffer_head(&session->buffer);

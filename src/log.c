@@ -54,7 +54,7 @@ void stats_vlog(const char *format, va_list ap) {
 			// failures (e.g. parent had closed stderr) then just
 			// proceed to the syslog call
 			bw = fwrite(fmt_buf + total_written, sizeof(char), fmt_len - total_written, stderr);
-			if (bw <= 0) {
+			if (bw == 0) {
 				break;
 			}
 			total_written += bw;
