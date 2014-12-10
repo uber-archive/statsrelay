@@ -273,9 +273,7 @@ static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
 		return 1;
 	}
 
-	char *key_copy = strndup(line, key_len);  // FIXME
-	stats_backend_t *backend = stats_get_backend(ss, key_copy, key_len);
-	free(key_copy);  // FIXME
+	stats_backend_t *backend = stats_get_backend(ss, line, key_len);
 
 	if (backend == NULL) {
 		return 1;
@@ -305,7 +303,13 @@ void stats_send_statistics(stats_session_t *session) {
 	stats_backend_t *backend;
 	ssize_t bytes_sent;
 
-	response = create_buffer(65536);
+	// TODO: this only needs to be allocated once, not every time we send
+	// statistics
+	response = create_buffer(MAX_UDP_LENGTH);
+	if (response == NULL) {
+		stats_log("failed to allocate send_statistics buffer");
+		return;
+	}
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
@@ -386,20 +390,28 @@ static int stats_process_lines(stats_session_t *session) {
 	char *head, *tail;
 	size_t len;
 
-	while (buffer_datacount(&session->buffer) > 0) {
+	static char line_buffer[MAX_UDP_LENGTH];
+
+	while (1) {
+		size_t datasize = buffer_datacount(&session->buffer);
+		if (datasize <= 0) {
+			break;
+		}
 		head = (char *)buffer_head(&session->buffer);
-		tail = memchr(head, '\n', buffer_datacount(&session->buffer));
+		tail = memchr(head, '\n', datasize);
 
 		if (tail == NULL) {
 			break;
 		}
 
 		len = tail - head;
+		memcpy(line_buffer, head, len);
+		memcpy(line_buffer + len, "\n\0", 2);
 
-		if (len >= 6 && memcmp(head, "status\n", 7) == 0) {
+		if (strcmp(line_buffer, "status\n") == 0) {
 			stats_send_statistics(session);
-		} else {
-			stats_relay_line(head, len, session->server);
+		} else if (stats_relay_line(line_buffer, len, session->server) != 0) {
+			return 1;
 		}
 		buffer_consume(&session->buffer, len + 1);	// Add 1 to include the '\n'
 	}
@@ -466,6 +478,9 @@ int stats_recv(int sd, void *data, void *ctx) {
 	return 0;
 }
 
+// TODO: refactor this whole method to share more code with the tcp receiver:
+//  * this shouldn't have to allocate a new buffer -- it should be on the ss
+//  * the line processing stuff should use stats_process_lines()
 int stats_udp_recv(int sd, void *data) {
 	stats_server_t *ss = (stats_server_t *)data;
 	ssize_t bytes_read;
@@ -475,7 +490,6 @@ int stats_udp_recv(int sd, void *data) {
 
 	static char line_buffer[MAX_UDP_LENGTH];
 
-	// TODO: use a persistent buffer
 	buffer = create_buffer(MAX_UDP_LENGTH);
 
 	bytes_read = read(sd, buffer_head(buffer), MAX_UDP_LENGTH);
