@@ -397,11 +397,10 @@ static int stats_process_lines(stats_session_t *session) {
 			break;
 		}
 		head = (char *)buffer_head(&session->buffer);
+		tail = memchr(head, '\n', datasize);
 		if (tail == NULL) {
 			break;
 		}
-		tail = memchr(head, '\n', datasize);
-
 		len = tail - head;
 		memcpy(line_buffer, head, len);
 		memcpy(line_buffer + len, "\n\0", 2);
