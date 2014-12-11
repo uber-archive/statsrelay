@@ -74,12 +74,12 @@ void tcpclient_set_sent_callback(tcpclient_t *client,
 		tcpclient_callback callback);
 
 int tcpclient_connect(tcpclient_t *client,
-		char *host,
-		char *port,
-		char *protocol);
+		const char *host,
+		const char *port,
+		const char *protocol);
 
 int tcpclient_sendall(tcpclient_t *client,
-		char *buf,
+		const char *buf,
 		size_t len);
 
 void tcpclient_destroy(tcpclient_t *client,

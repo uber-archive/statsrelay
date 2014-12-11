@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <fcntl.h>
 
+#include <assert.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -19,10 +20,13 @@
 #include "buffer.h"
 #include "stats.h"
 #include "log.h"
+#include "validate.h"
 
+#define BACKEND_RETRY_TIMEOUT 5
+#define MAX_UDP_LENGTH 65536
 
 struct stats_server_t {
-	char *ketama_filename;
+	const char *ketama_filename;
 	ketama_continuum kc;
 	GHashTable *backends;
 	GHashTable *ketama_cache;
@@ -36,6 +40,8 @@ struct stats_server_t {
 	uint64_t total_connections;
 	uint64_t malformed_lines;
 	time_t last_reload;
+	protocol_parser_t parser;
+	validate_line_validator_t validator;
 };
 
 typedef struct {
@@ -55,24 +61,18 @@ typedef struct {
 	int failing;
 } stats_backend_t;
 
-static char *valid_stat_types[6] = {
-	"c",
-	"ms",
-	"kv",
-	"g",
-	"h",
-	"s"
-};
-static int valid_stat_types_len = 6;
 
-stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
+stats_server_t *stats_server_create(
+		const char *filename,
+		struct ev_loop *loop,
+		protocol_parser_t parser,
+		validate_line_validator_t validator) {
 	stats_server_t *server;
 
 	server = malloc(sizeof(stats_server_t));
 	if (server == NULL) {
 		stats_log("stats: Unable to allocate memory");
-		free(server);
-		return NULL;
+		goto server_create_err;
 	}
 
 	server->loop = loop;
@@ -80,11 +80,10 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 	server->ketama_cache = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
 
 	server->ketama_filename = filename;
-	if (ketama_roll(&server->kc, filename) == 0) {
+	if (ketama_roll(&server->kc, (char *) filename) == 0) {
 		stats_log(ketama_error());
 		stats_log("stats: Unable to load ketama config from %s", filename);
-		free(server);
-		return NULL;
+		goto server_create_err;
 	}
 
 	server->max_send_queue = 0;
@@ -95,7 +94,15 @@ stats_server_t *stats_server_create(char *filename, struct ev_loop *loop) {
 	server->total_connections = 0;
 	server->last_reload = 0;
 
+	assert(parser != NULL);
+	server->parser = parser;
+	server->validator = validator;
+
 	return server;
+
+server_create_err:
+	free(server);
+	return NULL;
 }
 
 void stats_set_max_send_queue(stats_server_t *server, uint64_t size) {
@@ -125,7 +132,7 @@ void stats_kill_all_backends(stats_server_t *server) {
 }
 
 void stats_server_reload(stats_server_t *server) {
-	if (ketama_roll(&server->kc, server->ketama_filename) == 0) {
+	if (ketama_roll(&server->kc, (char *) server->ketama_filename) == 0) {
 		stats_log(ketama_error());
 		stats_log("stats: Unable to reload ketama config from %s", server->ketama_filename);
 	}
@@ -164,7 +171,7 @@ int stats_sent(void *tcpclient, enum tcpclient_event event, void *context, char 
 	return 0;
 }
 
-stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t keylen) {
+stats_backend_t *stats_get_backend(stats_server_t *server, const char *key, size_t keylen) {
 	stats_backend_t *backend;
 	char *address;
 	char *port;
@@ -181,7 +188,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 		return backend;
 	}
 
-	ks = ketama_get_server(key, server->kc);
+	ks = ketama_get_server((char *)key, keylen, server->kc);
 	ip = ks->ip;
 	iplen = sizeof(ks->ip);
 
@@ -250,122 +257,28 @@ stats_backend_t *stats_get_backend(stats_server_t *server, char *key, size_t key
 	return backend;
 }
 
-int stats_validate_line(char *line, size_t len) {
-	char *start, *end;
-	char *err;
-	size_t plen;
-	char c;
-	int i, valid;
 
-	start = line;
-	plen = len;
-	end = memchr(start, ':', plen);
-	if (end == NULL) {
-		stats_log("stats: Invalid line \"%s\" missing ':'", line);
-		return 1;
-	}
-
-	if ((end - start) < 1) {
-		stats_log("stats: Invalid line \"%s\" zero length key", line);
-		return 2;
-	}
-	
-	start = end + 1;
-	plen = len - (start - line);
-
-	c = end[0];
-	end[0] = '\0';
-	if ((strtod(start, &err) == 0.0) && (err == start)) {
-		end[0] = c;
-		stats_log("stats: Invalid line \"%s\" unable to parse value as double", line);
-		return 3;
-	}
-	end[0] = c;
-
-	end = memchr(start, '|', plen);
-	if (end == NULL) {
-		stats_log("stats: Invalid line \"%s\" missing '|'", line);
-		return 4;
-	}
-
-	start = end + 1;
-	plen = len - (start - line);
-
-	end = memchr(start, '|', plen);
-	if (end != NULL) {
-		c = end[0];
-		end[0] = '\0';
-		plen = end - start;
-	}
-
-	valid = 0;
-	for (i = 0; i < valid_stat_types_len; i++) {
-		if (strlen(valid_stat_types[i]) != plen) {
-			continue;
-		}
-		if (strncmp(start, valid_stat_types[i], plen) == 0) {
-			valid = 1;
-			break;
+static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
+	if (ss->validate_lines && ss->validator != NULL) {
+		if (ss->validator(line, len) != 0) {
+			return 1;
 		}
 	}
 
-	if (valid == 0) {
-		stats_log("stats: Invalid line \"%s\" unknown stat type \"%s\"", line, start);
-		return 7;
-	}
-
-	if (end != NULL) {
-		end[0] = c;
-		// end[0] is currently the second | char
-		// test if we have at least 1 char following it (@)
-		if ((len - (end - line) > 1) && (end[1] == '@')) {
-			start = end + 2;
-			plen = len - (start - line);
-			if (plen == 0) {
-				stats_log("stats: Invalid line \"%s\" @ sample with no rate", line);
-				return 5;
-			}
-			if ((strtod(start, &err) == 0.0) && err == start) {
-				stats_log("stats: Invalid line \"%s\" invalid sample rate", line);
-				return 6;
-			}
-		} else {
-			stats_log("stats: Invalid line \"%s\" no @ sample rate specifier", line);
-			return 8;
-		}
-	}
-
-	return 0;
-}
-
-int stats_relay_line(char *line, size_t len, stats_server_t *ss) {
-	stats_backend_t *backend;
-	char *keyend;
-
-	line[len] = '\0';
-
-	if (ss->validate_lines == 1 && stats_validate_line(line, len) != 0) {
-		return 1;
-	}
-
-	keyend = memchr(line, ':', len);
-	if (keyend == NULL) {
+	size_t key_len = ss->parser(line, len);
+	if (key_len == 0) {
 		ss->malformed_lines++;
-		stats_log("stats: dropping malformed line: \"%s\"", line);
+		stats_log("stats: failed to find key: \"%s\"", line);
 		return 1;
 	}
-	//keylen = keyend - line;
-	
-	keyend[0] = '\0';
-	backend = stats_get_backend(ss, line, (keyend - line));
-	keyend[0] = ':';
-	line[len] = '\n';
+
+	stats_backend_t *backend = stats_get_backend(ss, line, key_len);
 
 	if (backend == NULL) {
 		return 1;
 	}
 
-	if (tcpclient_sendall(&backend->client, line, len+1) != 0) {
+	if (tcpclient_sendall(&backend->client, line, len + 1) != 0) {
 		backend->dropped_lines++;
 		if (backend->failing == 0) {
 			stats_log("stats: Error sending to backend %s", backend->key);
@@ -389,7 +302,13 @@ void stats_send_statistics(stats_session_t *session) {
 	stats_backend_t *backend;
 	ssize_t bytes_sent;
 
-	response = create_buffer(65536);
+	// TODO: this only needs to be allocated once, not every time we send
+	// statistics
+	response = create_buffer(MAX_UDP_LENGTH);
+	if (response == NULL) {
+		stats_log("failed to allocate send_statistics buffer");
+		return;
+	}
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
@@ -466,24 +385,30 @@ void stats_send_statistics(stats_session_t *session) {
 	delete_buffer(response);
 }
 
-int stats_process_lines(stats_session_t *session) {
+static int stats_process_lines(stats_session_t *session) {
 	char *head, *tail;
 	size_t len;
 
-	while (buffer_datacount(&session->buffer) > 0) {
-		head = (char *)buffer_head(&session->buffer);
-		tail = memchr(head, '\n', buffer_datacount(&session->buffer));
+	static char line_buffer[MAX_UDP_LENGTH + 2];
 
+	while (1) {
+		size_t datasize = buffer_datacount(&session->buffer);
+		if (datasize == 0) {
+			break;
+		}
+		head = (char *)buffer_head(&session->buffer);
+		tail = memchr(head, '\n', datasize);
 		if (tail == NULL) {
 			break;
 		}
-
 		len = tail - head;
+		memcpy(line_buffer, head, len);
+		memcpy(line_buffer + len, "\n\0", 2);
 
-		if (len >= 6 && memcmp(head, "status\n", 7) == 0) {
+		if (strcmp(line_buffer, "status\n") == 0) {
 			stats_send_statistics(session);
-		} else {
-			stats_relay_line(head, len, session->server);
+		} else if (stats_relay_line(line_buffer, len, session->server) != 0) {
+			return 1;
 		}
 		buffer_consume(&session->buffer, len + 1);	// Add 1 to include the '\n'
 	}
@@ -548,6 +473,9 @@ int stats_recv(int sd, void *data, void *ctx) {
 	return 0;
 }
 
+// TODO: refactor this whole method to share more code with the tcp receiver:
+//  * this shouldn't have to allocate a new buffer -- it should be on the ss
+//  * the line processing stuff should use stats_process_lines()
 int stats_udp_recv(int sd, void *data) {
 	stats_server_t *ss = (stats_server_t *)data;
 	ssize_t bytes_read;
@@ -555,42 +483,49 @@ int stats_udp_recv(int sd, void *data) {
 	char *head, *tail;
 	size_t len;
 
+	static char line_buffer[MAX_UDP_LENGTH + 2];
+
 	buffer = create_buffer(MAX_UDP_LENGTH);
 
 	bytes_read = read(sd, buffer_head(buffer), MAX_UDP_LENGTH);
 
 	if (bytes_read == 0) {
-		delete_buffer(buffer);
 		stats_log("stats: Got zero-length UDP payload. That's weird.");
-		return 1;
+		goto udp_recv_err;
 	}
 
 	if (bytes_read < 0) {
 		if (errno == EAGAIN) {
-			delete_buffer(buffer);
-			return 0;
+			stats_log("stats: interrupted during recvfrom");
+			goto udp_recv_err;
 		} else {
-			delete_buffer(buffer);
 			stats_log("stats: Error calling recvfrom: %s", strerror(errno));
-			return 2;
+			goto udp_recv_err;
 		}
 	}
 
-	buffer_produced(buffer, bytes_read);
+	if (buffer_produced(buffer, bytes_read) != 0) {
+		stats_log("stats: failed to buffer_produced()\n");
+		goto udp_recv_err;
+	}
 	ss->bytes_recv_udp += bytes_read;
 
-	while (buffer_datacount(buffer) > 0) {
-		head = (char *)buffer_head(buffer);
-		tail = memchr(head, '\n', buffer_datacount(buffer));
-		len = tail - head;
-
+	while (1) {
+		int datasize = buffer_datacount(buffer);
+		if (datasize <= 0) {
+			break;
+		}
+		head = (char *) buffer_head(buffer);
+		tail = memchr(head, '\n', datasize);
 		if (tail == NULL) {
 			break;
 		}
+		len = tail - head;
+		memcpy(line_buffer, head, len);
+		memcpy(line_buffer + len, "\n\0", 2);
 
-		if (stats_relay_line(head, len, ss) != 0) {
-			delete_buffer(buffer);
-			return 3;
+		if (stats_relay_line(line_buffer, len, ss) != 0) {
+			goto udp_recv_err;
 		}
 		buffer_consume(buffer, len + 1);	// Add 1 to include the '\n'
 	}
@@ -598,13 +533,16 @@ int stats_udp_recv(int sd, void *data) {
 	len = buffer_datacount(buffer);
 	if (len > 0) {
 		if (stats_relay_line(buffer_head(buffer), len, ss) != 0) {
-			delete_buffer(buffer);
-			return 4;
+			goto udp_recv_err;
 		}
 	}
 
 	delete_buffer(buffer);
 	return 0;
+
+udp_recv_err:
+	delete_buffer(buffer);
+	return 1;
 }
 
 void stats_server_destroy(stats_server_t *server) {
