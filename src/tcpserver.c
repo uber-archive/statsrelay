@@ -264,16 +264,11 @@ int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char
 		return 1;
 	}
 
-	char *ptr = strrchr(address, ':');
+	char *ptr = strrchr(address_and_port, ':');
 	const char *port = ptr == NULL ? default_port : ptr + 1;
 
 	if (ptr != NULL) {
-	        *ptr = '\0';  // strip the :port from address
-	}
-
-	if (address[0] == '*') {
-		free(address);
-		address = NULL;
+		address[ptr - address_and_port] = '\0';
 	}
 
 	memset(&hints, 0, sizeof(struct addrinfo));
