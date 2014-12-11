@@ -251,11 +251,17 @@ int main(int argc, char **argv) {
 	ev_run(loop, 0);
 
 	stats_log_end();
-	g_list_free_full(options.binds, free);
+	for (l = options.binds; l != NULL; l = l->next) {
+		free(l->data);
+	}
+	g_list_free(options.binds);
 	return 0;
 
 err:
 	stats_log_end();
-	g_list_free_full(options.binds, free);
+	for (l = options.binds; l != NULL; l = l->next) {
+		free(l->data);
+	}
+	g_list_free(options.binds);
 	return 1;
 }
