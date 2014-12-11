@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
     lineptr = NULL;
     while ((len = getline(&lineptr, &linelen, input)) != -1) {
         lineptr[len-1] = '\0';
-        ks = ketama_get_server(lineptr, server->kc);
+        ks = ketama_get_server(lineptr, len, server->kc);
         printf("%s\n", ks->ip);
         free(lineptr);
         lineptr = NULL;

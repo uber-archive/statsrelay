@@ -193,13 +193,13 @@ ketama_sem_init( key_t key )
 
 /* ketama.h does not expose this function */
 void
-ketama_md5_digest( char* inString, unsigned char md5pword[EVP_MAX_MD_SIZE] )
+ketama_md5_digest( char* inString, size_t inLen, unsigned char md5pword[EVP_MAX_MD_SIZE] )
 {
     EVP_MD_CTX c;
 
     EVP_MD_CTX_init( &c );
     EVP_DigestInit_ex(&c, EVP_md5(), NULL);
-    EVP_DigestUpdate( &c, (void *)inString, strlen( inString ) );
+    EVP_DigestUpdate( &c, (void *)inString, inLen );
     EVP_DigestFinal_ex( &c, md5pword, NULL );
     EVP_MD_CTX_cleanup( &c );
 }
@@ -356,11 +356,11 @@ read_server_definitions( char* filename, unsigned int* count, unsigned long* mem
 
 
 unsigned int
-ketama_hashi( char* inString )
+ketama_hashi( char* inString, size_t inLen )
 {
     unsigned char digest[EVP_MAX_MD_SIZE];
 
-    ketama_md5_digest( inString, digest );
+    ketama_md5_digest( inString, inLen, digest );
     return (unsigned int)(( digest[3] << 24 )
                         | ( digest[2] << 16 )
                         | ( digest[1] <<  8 )
@@ -369,9 +369,9 @@ ketama_hashi( char* inString )
 
 
 mcs*
-ketama_get_server( char* key, ketama_continuum cont )
+ketama_get_server( char* key, size_t keylen, ketama_continuum cont )
 {
-    unsigned int h = ketama_hashi( key );
+    unsigned int h = ketama_hashi( key, keylen );
     int highp = cont->numpoints;
     mcs (*mcsarr)[cont->numpoints] = cont->array;
     int lowp = 0, midp;
@@ -464,7 +464,7 @@ ketama_create_continuum( key_t key, char* filename )
             unsigned char digest[16];
 
             sprintf( ss, "%s-%d", slist[i].tag, k );
-            ketama_md5_digest( ss, digest );
+            ketama_md5_digest( ss, 30, digest );
 
             /* Use successive 4-bytes from hash as numbers
              * for the points on the circle: */

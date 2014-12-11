@@ -188,7 +188,7 @@ stats_backend_t *stats_get_backend(stats_server_t *server, const char *key, size
 		return backend;
 	}
 
-	ks = ketama_get_server((char *)key, server->kc);
+	ks = ketama_get_server((char *)key, keylen, server->kc);
 	ip = ks->ip;
 	iplen = sizeof(ks->ip);
 
