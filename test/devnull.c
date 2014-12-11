@@ -9,9 +9,9 @@ void devnull(int fd) {
 	char buf[65536];
 	size_t len;
 
-	while(1) {
+	while (1) {
 		len = read(fd, buf, 65536);
-		if(len < 1) {
+		if (len < 1) {
 			fprintf(stderr, "Child exiting\n");
 			return;
 		}
@@ -21,7 +21,7 @@ void devnull(int fd) {
 int main(int argc, char *argv[]) {
 	int sd;
 
-	if(argc < 2) {
+	if (argc < 2) {
 		fprintf(stderr, "Usage: %s <port>\n", argv[0]);
 		return 1;
 	}
@@ -51,14 +51,14 @@ int main(int argc, char *argv[]) {
 
 	listen(sockfd, 1);
 
-	while(1) {
+	while (1) {
 		acceptfd = accept(sockfd, (struct sockaddr *)&their_addr, &addr_size);
 		pid = fork();
-		if(pid == 0) {
+		if (pid == 0) {
 			// child
 			devnull(acceptfd);
 			return 0;
-		}else{
+		} else {
 			fprintf(stderr, "Forked pid %i\n", pid);
 		}
 	}

@@ -1,6 +1,7 @@
 #include "config.h"
-#include "stats.h"
+#include "ketama.h"
 #include "log.h"
+#include "stats.h"
 
 #include <signal.h>
 #include <string.h>
@@ -40,10 +41,10 @@ struct stats_server_t {
 	time_t last_reload;
 };
 
-stats_server_t *server = NULL;
+static stats_server_t *server = NULL;
 
 
-void print_help(const char *argv0) {
+static void print_help(const char *argv0) {
 	fprintf(stderr, "Usage: %s [options] [FILENAME]                         \n\
     --help                  Display this message                            \n\
     --verbose               Write log messages to stderr in addition to     \n\
@@ -51,12 +52,6 @@ void print_help(const char *argv0) {
     --config=filename       Use the given ketama config file                \n\
                             (default: /etc/statsrelay.conf)                 \n",
 		argv0);
-}
-
-void print_ip(stats_server_t *server, char *key) {
-    mcs *ks;
-    ks = ketama_get_server(key, server->kc);
-    printf("%s\n", ks->ip);
 }
 
 int main(int argc, char **argv) {
@@ -93,9 +88,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-
-
-	server = stats_server_create(options.filename, NULL);
+	server = stats_server_create(options.filename, NULL, NULL, NULL);
 
 	if (server == NULL) {
 		stats_log("main: Unable to create stats_server");
@@ -110,6 +103,7 @@ int main(int argc, char **argv) {
         input = fopen(argv[optind], "r");
         if (input == NULL) {
             printf("Could not open %s", argv[optind]);
+            stats_log_end();
             return 1;
         }
     }
@@ -117,10 +111,11 @@ int main(int argc, char **argv) {
     lineptr = NULL;
     while ((len = getline(&lineptr, &linelen, input)) != -1) {
         lineptr[len-1] = '\0';
-        ks = ketama_get_server(lineptr, server->kc);
+        ks = ketama_get_server(lineptr, len, server->kc);
         printf("%s\n", ks->ip);
         free(lineptr);
         lineptr = NULL;
     }
+	stats_log_end();
 	return 0;
 }

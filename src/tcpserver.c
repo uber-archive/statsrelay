@@ -17,6 +17,9 @@
 #define MAX_TCP_HANDLERS 32
 #define LISTEN_BACKLOG 128
 
+typedef struct tcplistener_t tcplistener_t;
+typedef struct tcpsession_t tcpsession_t;
+
 // tcpserver_t represents an event loop bound to multiple sockets
 struct tcpserver_t {
 	struct ev_loop *loop;
@@ -47,51 +50,40 @@ struct tcpsession_t {
 };
 
 
-// Called every time the server socket is readable (new connection to be accepted)
-// if you don't consume it, it'll get called again very quickly
-void tcplistener_accept_callback(struct ev_loop *loop, struct ev_io *watcher, int revents) {
-	socklen_t sin_size;
-	tcplistener_t *listener;
+static tcpsession_t *tcpsession_create(tcplistener_t *listener) {
 	tcpsession_t *session;
-	int err;
 
-	if (revents & EV_ERROR) {
-		// ev(3) says this is an error of "unspecified" type, so
-		// that's bloody useful.
-		stats_log("tcplistener: libev server socket error");
-		return;
-	}
-
-	listener = (tcplistener_t *)watcher->data;
-	session = tcpsession_create(listener);
+	session = malloc(sizeof(tcpsession_t));
 	if (session == NULL) {
-		stats_log("tcplistener: Unable to allocate tcpsession, not calling accept()");
-		return;
+		return NULL;
 	}
 
-	sin_size = sizeof(session->client_addr);
-	session->sd = accept(watcher->fd, (struct sockaddr *)&session->client_addr, &sin_size);
-	if (session->sd < 0) {
-		stats_log("tcplistener: Error accepting connection: %s", strerror(errno));
-		return;
+	session->watcher = malloc(sizeof(struct ev_io));
+	if (session->watcher == NULL) {
+		free(session);
+		return NULL;
 	}
 
-	err = fcntl(session->sd, F_SETFL, (fcntl(session->sd, F_GETFL) | O_NONBLOCK));
-	if (err != 0) {
-		stats_log("tcplistener: Error setting socket to non-blocking: %s", strerror(errno));
-		return;
-	}
-
-	session->ctx = listener->cb_conn(session->sd, session->data);
-
-	ev_io_init(session->watcher, tcpsession_recv_callback, session->sd, EV_READ);
-	ev_io_start(loop, session->watcher);
+	session->loop = listener->loop;
+	session->data = listener->data;
+	session->sd = -1;
+	session->cb_recv = listener->cb_recv;
+	session->watcher->data = (void *)session;
+	return session;
 }
 
+static void tcpsession_destroy(tcpsession_t *session) {
+	if (session->sd > 0) {
+		close(session->sd);
+	}
+	ev_io_stop(session->loop, session->watcher);
+	free(session->watcher);
+	free(session);
+}
 
 // Called every time the session socket is readable (data available)
 // if you don't consume it, it'll get called again very quickly
-void tcpsession_recv_callback(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+static void tcpsession_recv_callback(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 	tcpsession_t *session;
 
 	if (revents & EV_ERROR) {
@@ -120,52 +112,60 @@ void tcpsession_recv_callback(struct ev_loop *loop, struct ev_io *watcher, int r
 }
 
 
-tcpsession_t *tcpsession_create(tcplistener_t *listener) {
+
+// Called every time the server socket is readable (new connection to be accepted)
+// if you don't consume it, it'll get called again very quickly
+static void tcplistener_accept_callback(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+	socklen_t sin_size;
+	tcplistener_t *listener;
 	tcpsession_t *session;
+	int err;
 
-	session = malloc(sizeof(tcpsession_t));
+	if (revents & EV_ERROR) {
+		// ev(3) says this is an error of "unspecified" type, so
+		// that's bloody useful.
+		stats_log("tcplistener: libev server socket error");
+		return;
+	}
+
+	listener = (tcplistener_t *) watcher->data;
+	session = tcpsession_create(listener);
 	if (session == NULL) {
-		return NULL;
+		stats_log("tcplistener: Unable to allocate tcpsession, not calling accept()");
+		return;
 	}
 
-	session->watcher = malloc(sizeof(struct ev_io));
-	if (session->watcher == NULL) {
-		free(session);
-		return NULL;
+	sin_size = sizeof(session->client_addr);
+	session->sd = accept(watcher->fd, (struct sockaddr *)&session->client_addr, &sin_size);
+	if (session->sd < 0) {
+		stats_log("tcplistener: Error accepting connection: %s", strerror(errno));
+		return;
 	}
 
-	session->loop = listener->loop;
-	session->data = listener->data;
-	session->sd = -1;
-	session->cb_recv = listener->cb_recv;
-	session->watcher->data = (void *)session;
-	return session;
-}
-
-void tcpsession_destroy(tcpsession_t *session) {
-	if (session->sd > 0) {
-		close(session->sd);
+	err = fcntl(session->sd, F_SETFL, (fcntl(session->sd, F_GETFL) | O_NONBLOCK));
+	if (err != 0) {
+		stats_log("tcplistener: Error setting socket to non-blocking: %s", strerror(errno));
+		return;
 	}
-	ev_io_stop(session->loop, session->watcher);
-	free(session->watcher);
-	free(session);
+
+	session->ctx = listener->cb_conn(session->sd, session->data);
+
+	ev_io_init(session->watcher, tcpsession_recv_callback, session->sd, EV_READ);
+	ev_io_start(loop, session->watcher);
 }
 
 
 tcpserver_t *tcpserver_create(struct ev_loop *loop, void *data) {
 	tcpserver_t *server;
-
-	server = (tcpserver_t *)malloc(sizeof(tcpserver_t));
-
+	server = (tcpserver_t *) malloc(sizeof(tcpserver_t));
 	server->loop = ev_default_loop(0);
 	server->listeners_len = 0;
 	server->data = data;
-
 	return server;
 }
 
 
-tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *addr, void *(*cb_conn)(int, void *), int (*cb_recv)(int, void *, void *)) {
+static tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *addr, void *(*cb_conn)(int, void *), int (*cb_recv)(int, void *, void *)) {
 	tcplistener_t *listener;
 	char addr_string[INET6_ADDRSTRLEN];
 	void *ip;
@@ -188,7 +188,7 @@ tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *addr, vo
 		struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr->ai_addr;
 		ip = &(ipv4->sin_addr);
 		port = ntohs(ipv4->sin_port);
-	}else{
+	} else {
 		struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)addr->ai_addr;
 		ip = &(ipv6->sin6_addr);
 		port = ntohs(ipv6->sin6_port);
@@ -243,7 +243,7 @@ tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *addr, vo
 }
 
 
-void tcplistener_destroy(tcpserver_t *server, tcplistener_t *listener) {
+static void tcplistener_destroy(tcpserver_t *server, tcplistener_t *listener) {
 	if (listener->watcher != NULL) {
 		ev_io_stop(server->loop, listener->watcher);
 		free(listener->watcher);
@@ -252,29 +252,29 @@ void tcplistener_destroy(tcpserver_t *server, tcplistener_t *listener) {
 }
 
 
-int tcpserver_bind(tcpserver_t *server, char *address_and_port, char *default_port, void *(*cb_conn)(int, void *), int (*cb_recv)(int, void *, void *)) {
+int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char *default_port, void *(*cb_conn)(int, void *), int (*cb_recv)(int, void *, void *)) {
 	tcplistener_t *listener;
 	struct addrinfo hints;
 	struct addrinfo *addrs, *p;
 	int err;
 
-	char *address;
-	char *port;
-	char *ptr;
+	char *address = strdup(address_and_port);
+	if (address == NULL) {
+		stats_log("tcpserver: strdup(3) failed");
+		return 1;
+	}
 
-	address = address_and_port;
-	ptr = strrchr(address_and_port, ':');
-	if (ptr == NULL) {
-		port = default_port;
-	}else{
-		ptr[0] = '\0';
-		port = ptr + 1;
+	char *ptr = strrchr(address, ':');
+	const char *port = ptr == NULL ? default_port : ptr + 1;
+
+	if (ptr != NULL) {
+	        *ptr = '\0';  // strip the :port from address
 	}
 
 	if (address[0] == '*') {
+		free(address);
 		address = NULL;
 	}
-
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
@@ -283,6 +283,7 @@ int tcpserver_bind(tcpserver_t *server, char *address_and_port, char *default_po
 
 	err = getaddrinfo(address, port, &hints, &addrs);
 	if (err != 0) {
+		free(address);
 		stats_log("tcpserver: getaddrinfo error: %s", gai_strerror(err));
 		return 1;
 	}
@@ -290,6 +291,7 @@ int tcpserver_bind(tcpserver_t *server, char *address_and_port, char *default_po
 	for (p = addrs; p != NULL; p = p->ai_next) {
 		if (server->listeners_len >= MAX_TCP_HANDLERS) {
 			stats_log("tcpserver: Unable to create more than %i TCP listeners", MAX_TCP_HANDLERS);
+			free(address);
 			freeaddrinfo(addrs);
 			return 1;
 		}
@@ -305,20 +307,14 @@ int tcpserver_bind(tcpserver_t *server, char *address_and_port, char *default_po
 		ev_io_start(server->loop, listener->watcher);
 	}
 
-	if (port != default_port) {
-		port--;
-		port[0] = ':';
-	}
-
+	free(address);
 	freeaddrinfo(addrs);
 	return 0;
 }
 
 
 void tcpserver_destroy(tcpserver_t *server) {
-	int i;
-
-	for (i = 0; i < server->listeners_len; i++) {
+	for (int i = 0; i < server->listeners_len; i++) {
 		tcplistener_destroy(server, server->listeners[i]);
 	}
 	free(server);

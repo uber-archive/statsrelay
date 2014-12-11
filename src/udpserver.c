@@ -16,6 +16,9 @@
 
 #define MAX_UDP_HANDLERS 32
 
+typedef struct udplistener_t udplistener_t;
+
+
 // udpserver_t represents an event loop bound to multiple sockets
 struct udpserver_t {
 	struct ev_loop *loop;
@@ -46,7 +49,7 @@ udpserver_t *udpserver_create(struct ev_loop *loop, void *data) {
 	return server;
 }
 
-void udplistener_recv_callback(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+static void udplistener_recv_callback(struct ev_loop *loop, struct ev_io *watcher, int revents) {
 	udplistener_t *listener;
 	listener = (udplistener_t *)watcher->data;
 
@@ -61,7 +64,7 @@ void udplistener_recv_callback(struct ev_loop *loop, struct ev_io *watcher, int 
 	}
 }
 
-udplistener_t *udplistener_create(udpserver_t *server, struct addrinfo *addr, int (*cb_recv)(int, void *)) {
+static udplistener_t *udplistener_create(udpserver_t *server, struct addrinfo *addr, int (*cb_recv)(int, void *)) {
 	udplistener_t *listener;
 	char addr_string[INET6_ADDRSTRLEN];
 	void *ip;
@@ -83,7 +86,7 @@ udplistener_t *udplistener_create(udpserver_t *server, struct addrinfo *addr, in
 		struct sockaddr_in *ipv4 = (struct sockaddr_in *)addr->ai_addr;
 		ip = &(ipv4->sin_addr);
 		port = ntohs(ipv4->sin_port);
-	}else{
+	} else {
 		struct sockaddr_in6 *ipv6 = (struct sockaddr_in6 *)addr->ai_addr;
 		ip = &(ipv6->sin6_addr);
 		port = ntohs(ipv6->sin6_port);
@@ -131,7 +134,7 @@ udplistener_t *udplistener_create(udpserver_t *server, struct addrinfo *addr, in
 }
 
 
-void udplistener_destroy(udpserver_t *server, udplistener_t *listener) {
+static void udplistener_destroy(udpserver_t *server, udplistener_t *listener) {
 	if (listener->watcher != NULL) {
 		ev_io_stop(server->loop, listener->watcher);
 		free(listener->watcher);
@@ -140,29 +143,29 @@ void udplistener_destroy(udpserver_t *server, udplistener_t *listener) {
 }
 
 
-int udpserver_bind(udpserver_t *server, char *address_and_port, char *default_port, int (*cb_recv)(int, void *)) {
+int udpserver_bind(udpserver_t *server, const char *address_and_port, const char *default_port, int (*cb_recv)(int, void *)) {
 	udplistener_t *listener;
 	struct addrinfo hints;
 	struct addrinfo *addrs, *p;
 	int err;
 
-	char *address;
-	char *port;
-	char *ptr;
+	char *address = strdup(address_and_port);
+	if (address == NULL) {
+		stats_log("udpserver: strdup(3) failed");
+		return 1;
+	}
 
-	address = address_and_port;
-	ptr = strrchr(address_and_port, ':');
-	if (ptr == NULL) {
-		port = default_port;
-	}else{
-		ptr[0] = '\0';
-		port = ptr + 1;
+	char *ptr = strrchr(address, ':');
+	const char *port = ptr == NULL ? default_port : ptr + 1;
+
+	if (ptr != NULL) {
+	        *ptr = '\0';  // strip the :port from address
 	}
 
 	if (address[0] == '*') {
+		free(address);
 		address = NULL;
 	}
-
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
@@ -171,6 +174,7 @@ int udpserver_bind(udpserver_t *server, char *address_and_port, char *default_po
 
 	err = getaddrinfo(address, port, &hints, &addrs);
 	if (err != 0) {
+		free(address);
 		stats_log("udpserver: getaddrinfo error: %s", gai_strerror(err));
 		return 1;
 	}
@@ -178,6 +182,7 @@ int udpserver_bind(udpserver_t *server, char *address_and_port, char *default_po
 	for (p = addrs; p != NULL; p = p->ai_next) {
 		if (server->listeners_len >= MAX_UDP_HANDLERS) {
 			stats_log("udpserver: Unable to create more than %i UDP listeners", MAX_UDP_HANDLERS);
+			free(address);
 			freeaddrinfo(addrs);
 			return 1;
 		}
@@ -193,6 +198,7 @@ int udpserver_bind(udpserver_t *server, char *address_and_port, char *default_po
 		ev_io_start(server->loop, listener->watcher);
 	}
 
+	free(address);
 	freeaddrinfo(addrs);
 	return 0;
 }
