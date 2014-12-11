@@ -152,6 +152,19 @@ int main(int argc, char **argv) {
 				options.verbose = 1;
 				break;
 			case 'c':
+				if (access(optarg, R_OK)) {
+					stats_log("can't read config file at \"%s\"", optarg);
+					goto err;
+				}
+				struct stat st_buf;
+				if (stat(optarg, &st_buf) == -1) {
+					stats_log("failed to stat(2) config file at \"%s\"", optarg);
+					goto err;
+				}
+				if (!S_ISREG(st_buf.st_mode)) {
+					stats_log("the config file \"%s\" exists, but appears to be the wrong file type; cowardly refusing to continue due to ketama bug", optarg);
+					goto err;
+				}
 				options.filename = optarg;
 				break;
 			case 'q':
