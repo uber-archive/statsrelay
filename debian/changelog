@@ -1,3 +1,9 @@
+statsrelay (1.3.3-1) unstable; urgency=low
+
+  * Add -dbg package, ensure clean upstream
+
+ -- Jeremy Grosser <jeremy@synack.me>  Thu, 11 Dec 2014 14:52:00 -0800
+
 statsrelay (1.3.2-2) unstable; urgency=low
 
   * Upstream change to configure.ac

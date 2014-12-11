@@ -12,5 +12,12 @@
 %:
 	dh $@ --with autoreconf
 
+.PHONY: override_dh_strip
+override_dh_strip:
+	dh_strip --dbg-package=statsrelay-dbg
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/statsrelay
+
 clean:
 	dh clean

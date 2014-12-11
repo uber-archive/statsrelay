@@ -9,3 +9,10 @@ Package: statsrelay
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: A consistent-hashing relay for statsd metrics
+
+Package: statsrelay-dbg
+Architecture: any
+Section: debug
+Priority: extra
+Depends: statsrelay (= ${binary:Version}), ${misc:Depends}
+Description: Debugging symbols for statsrelay
