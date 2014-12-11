@@ -1,4 +1,4 @@
-AC_INIT([statsrelay], [1.3.2])
+AC_INIT([statsrelay], m4_esyscmd([tr -d '\n' < VERSION]))
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_PROG_CC
 AC_USE_SYSTEM_EXTENSIONS
