@@ -2,12 +2,13 @@
 #define STATSRELAY_LOG_H
 
 #include <stdarg.h>
+#include <stdbool.h>
 
 // set verbose logging, i.e. send logs to stderr
 void stats_log_verbose(int verbose);
 
 // variadic log function
-void stats_vlog(const char *format, va_list ap);
+void stats_vlog(bool debug, const char *format, va_list ap);
 
 // log a message
 void stats_log(const char *format, ...);

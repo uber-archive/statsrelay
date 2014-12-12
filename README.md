@@ -18,12 +18,10 @@ Copyright (c) 2007-2014 Richard Jones <rj@metabrew.com>
 Dependencies:
 - automake
 - pkg-config
-- libssl (>= 1.0.1e)
 - libev (>= 4.11)
-- glib (>= 2.32)
 
 ```
-apt-get install automake pkg-config libev-dev libglib2.0-dev libssl-dev
+apt-get install automake pkg-config libev-dev
 
 autoreconf --install
 ./configure
@@ -39,23 +37,13 @@ make install
 Usage: statsrelay [options]
     --help                  Display this message
     --verbose               Write log messages to stderr in addition to
-                            syslog
+			    syslog
     --bind=address[:port]   Bind to the given address and port
-                            (default: *:8125)
-    --config=filename       Use the given ketama config file
-                            (default: /etc/statsrelay.conf)
+			    (default: *:8125)
+    --config=filename       Use the given config file
+			    (default: /etc/statsrelay.conf)
     --max-send-queue=BYTES  Limit each backend connection's send queue to
-                            the given size. (default: 134217728)
-```
-
-Example ketama config:
-```
-# This is a comment
-# Each line is a backend server definition
-# IP:PORT WEIGHT
-127.0.0.1:8125 600
-1.2.3.4:8125 300
-# Note: Only dotted quad IPv4 addresses are supported
+			    the given size. (default: 134217728)
 ```
 
 ```

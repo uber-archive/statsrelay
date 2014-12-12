@@ -39,13 +39,10 @@ struct udplistener_t {
 
 udpserver_t *udpserver_create(struct ev_loop *loop, void *data) {
 	udpserver_t *server;
-
-	server = (udpserver_t *)malloc(sizeof(udpserver_t));
-
+	server = malloc(sizeof(udpserver_t));
 	server->loop = loop;
 	server->listeners_len = 0;
 	server->data = data;
-
 	return server;
 }
 
@@ -76,10 +73,9 @@ static udplistener_t *udplistener_create(udpserver_t *server, struct addrinfo *a
 	listener->loop = server->loop;
 	listener->data = server->data;
 	listener->cb_recv = cb_recv;
-	listener->sd = socket(
-				addr->ai_family,
-				addr->ai_socktype,
-				addr->ai_protocol);
+	listener->sd = socket(addr->ai_family,
+			      addr->ai_socktype,
+			      addr->ai_protocol);
 
 	memset(addr_string, 0, INET6_ADDRSTRLEN);
 	if (addr->ai_family == AF_INET) {
@@ -128,7 +124,7 @@ static udplistener_t *udplistener_create(udpserver_t *server, struct addrinfo *a
 	listener->watcher->data = (void *)listener;
 
 	ev_io_init(listener->watcher, udplistener_recv_callback, listener->sd, EV_READ);
-	stats_log("udpserver: Listening on %s[:%i]", addr_string, port);
+	stats_log("udpserver: Listening on frontend %s[:%i], fd = %d", addr_string, port, listener->sd);
 
 	return listener;
 }

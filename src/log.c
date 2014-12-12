@@ -16,7 +16,7 @@ void stats_log_verbose(int verbose) {
 	g_verbose = verbose;
 }
 
-void stats_vlog(const char *format, va_list ap) {
+void stats_vlog(bool debug, const char *format, va_list ap) {
 	int fmt_len;
 	char *np;
 	size_t total_written, bw;
@@ -48,6 +48,9 @@ void stats_vlog(const char *format, va_list ap) {
 	}
 
 	if (g_verbose == 1) {
+		if (debug) {
+			fprintf(stderr, "DEBUG: ");
+		}
 		total_written = 0;
 		while (total_written < fmt_len) {
 			// try to write to stderr, but if there are any
@@ -64,7 +67,9 @@ void stats_vlog(const char *format, va_list ap) {
 		}
 	}
 
-	syslog(LOG_INFO, fmt_buf, fmt_len);
+	if (!debug) {
+		syslog(LOG_INFO, fmt_buf, fmt_len);
+	}
 
 	if (fmt_buf_size > STATSRELAY_LOG_BUF_SIZE) {
 		if ((np = realloc(fmt_buf, STATSRELAY_LOG_BUF_SIZE)) == NULL) {
@@ -83,7 +88,7 @@ alloc_failure:
 void stats_log(const char *format, ...) {
 	va_list args;
 	va_start(args, format);
-	stats_vlog(format, args);
+	stats_vlog(false, format, args);
 	va_end(args);
 }
 
@@ -91,7 +96,7 @@ void stats_debug_log(const char *format, ...) {
 	if (g_verbose) {
 		va_list args;
 		va_start(args, format);
-		stats_vlog(format, args);
+		stats_vlog(true, format, args);
 		va_end(args);
 	}
 }
