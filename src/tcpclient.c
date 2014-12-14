@@ -16,6 +16,9 @@
 #include <ev.h>
 
 
+#define DEFAULT_BUFFER_SIZE (1<<16)
+
+
 static int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *context, char *data, size_t len) {
 	// default is to do nothing
 	if (event == EVENT_RECV) {
@@ -68,7 +71,7 @@ int tcpclient_init(tcpclient_t *client,
 	client->callback_error = &tcpclient_default_callback;
 	client->callback_context = callback_context;
 	buffer_init(&client->send_queue);
-	buffer_newsize(&client->send_queue, 67108864);	// Use a larger buffer so that we realign less often
+	buffer_newsize(&client->send_queue, DEFAULT_BUFFER_SIZE);
 	ev_timer_init(&client->timeout_watcher, tcpclient_connect_timeout, TCPCLIENT_CONNECT_TIMEOUT, 0);
 
 	client->connect_watcher.started = false;
@@ -357,15 +360,15 @@ void tcpclient_destroy(tcpclient_t *client, int drop_queue) {
 		ev_io_stop(client->loop, &client->read_watcher.watcher);
 		client->read_watcher.started = false;
 	}
-//	if (client->write_watcher.started) {
+	if (client->write_watcher.started) {
 		stats_debug_log("tcpclient_destroy: stopping write watcher");
 		ev_io_stop(client->loop, &client->write_watcher.watcher);
 		client->write_watcher.started = false;
-//	}
+	}
 		stats_debug_log("closing client->sd %d", client->sd);
 	close(client->sd);
-	buffer_destroy(&client->send_queue);
 	if (client->addr != NULL) {
 		freeaddrinfo(client->addr);
 	}
+	buffer_destroy(&client->send_queue);
 }

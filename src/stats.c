@@ -216,6 +216,7 @@ stats_server_t *stats_server_create(const char *filename,
 	server->total_connections = 0;
 	server->last_reload = 0;
 
+	server->validate_lines = 1;
 	server->parser = parser;
 	server->validator = validator;
 
@@ -459,8 +460,7 @@ int stats_recv(int sd, void *data, void *ctx) {
 		if (space == 0) {
 			if (buffer_expand(&session->buffer) != 0) {
 				stats_log("stats: Unable to expand buffer, aborting");
-				stats_session_destroy(session);
-				return 1;
+				goto stats_recv_err;
 			}
 			space = buffer_spacecount(&session->buffer);
 		}
@@ -469,12 +469,10 @@ int stats_recv(int sd, void *data, void *ctx) {
 	bytes_read = recv(sd, buffer_tail(&session->buffer), space, 0);
 	if (bytes_read < 0) {
 		stats_log("stats: Error receiving from socket: %s", strerror(errno));
-		stats_session_destroy(session);
-		return 2;
+		goto stats_recv_err;
 	} else if (bytes_read == 0) {
 		stats_debug_log("stats: client from fd %d closed conncetion", sd);
-		stats_session_destroy(session);
-		return 3;
+		goto stats_recv_err;
 	} else {
 		stats_debug_log("stats: received %zd bytes from tcp client fd %d", bytes_read, sd);
 	}
@@ -483,17 +481,19 @@ int stats_recv(int sd, void *data, void *ctx) {
 
 	if (buffer_produced(&session->buffer, bytes_read) != 0) {
 		stats_log("stats: Unable to produce buffer by %i bytes, aborting", bytes_read);
-		stats_session_destroy(session);
-		return 4;
+		goto stats_recv_err;
 	}
 
 	if (stats_process_lines(session) != 0) {
 		stats_log("stats: Invalid line processed, closing connection");
-		stats_session_destroy(session);
-		return 5;
+		goto stats_recv_err;
 	}
 
 	return 0;
+
+stats_recv_err:
+	stats_session_destroy(session);
+	return 1;
 }
 
 // TODO: refactor this whole method to share more code with the tcp receiver:

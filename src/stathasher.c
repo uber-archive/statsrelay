@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
 
 	while ((bytes_read = getline(&line, &len, stdin)) != -1) {
 		while (bytes_read > 0) {
-			if (isspace(line[bytes_read -1 ])) {
+			if (isspace(line[bytes_read - 1])) {
 				line[bytes_read - 1] = '\0';
 				bytes_read--;
 			} else {

@@ -11,9 +11,12 @@ autom4te.cache/
 compile
 config.*
 configure
+core.*
 depcomp
 install-sh
+massif.out.*
 missing
+perf.data
 src/stathasher
 src/statsrelay
 stamp-*

@@ -57,7 +57,6 @@ static const uint64_t default_max_send_queue = 134217728;
 
 static void graceful_shutdown(struct ev_loop *loop, ev_signal *w, int revents) {
 	stats_log("Received signal, shutting down.");
-	ev_break(loop, EVBREAK_ALL);
 
 	if (ts != NULL) {
 		tcpserver_destroy(ts);
@@ -68,6 +67,7 @@ static void graceful_shutdown(struct ev_loop *loop, ev_signal *w, int revents) {
 	if (server != NULL) {
 		stats_server_destroy(server);
 	}
+	ev_break(loop, EVBREAK_ALL);
 }
 
 static void reload_config(struct ev_loop *loop, ev_signal *w, int revents) {
