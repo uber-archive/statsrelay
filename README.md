@@ -100,3 +100,101 @@ backend:127.0.0.2:8127 relayed_lines counter 3
 backend:127.0.0.2:8127 dropped_lines counter 0
 
 ```
+
+# Scaling With Virtual Shards
+
+Statsrelay implements a virtual sharding scheme, which allows you to
+easily scale your statsd and carbon backends by reassigning virtual
+shards to actual statsd/carbon instance or servers. This technique
+also applies to alternative statsd implementations like statsite.
+
+Consider the following simplified example with this config file:
+
+```
+10.0.0.1:9000
+10.0.0.1:9000
+10.0.0.1:9001
+10.0.0.1:9001
+10.0.0.2:9000
+10.0.0.2:9000
+10.0.0.2:9001
+10.0.0.2:9001
+```
+
+In this file we've defined two actual backend hosts (10.0.0.1 and
+10.0.0.2). Each of these hosts is running two statsd instances, one on
+port 9000 and one on port 9001 (this is a good way to scale statsd,
+since statsd and alternative implementations like statsite are
+typically single threaded). In a real setup, you'd likely be running
+more statsd instances on each server, and you'd likely have more
+repeated lines to assign more virtual shards to each statsd instance.
+
+Internally statsrelay assigns a zero-indexed virtual shard to each
+line in the file; so 10.0.0.1:9000 has virtual shards 0 and 1,
+10.0.0.1:9001 has virtual shards 2 and 3, and so on.
+
+Let's say that the backend server 10.0.0.1 has become overloaded, and
+we want to add a new server to the configuration. We might do that
+like this:
+
+```
+10.0.0.1:9000
+10.0.0.3:9000
+10.0.0.1:9001
+10.0.0.3:9001
+10.0.0.2:9000
+10.0.0.2:9000
+10.0.0.2:9001
+10.0.0.2:9001
+```
+
+In the new configuration we've moved one of the two virtual shards for
+10.0.0.1:9000 to 10.0.0.3:9000, and we've moved one of the two virtual
+shards for 10.0.0.1:9001 to 10.0.0.3:9001. In other words, we've
+reassigned the mapping for virtual shard 1 and virtual shard 3. Note
+that when you do this, you want to maintain the same number of virtual
+shards always, so you probably want to pick a large number of virtual
+shards to start (say, 1024 virtual shards, meaning the configuration
+file should have 1024 lines). You should have many duplicated lines in
+the config file when you do this.
+
+To do optimal shard assignment, you'll want to write a program that
+looks at the CPU usage of your shards and figures out the optimal
+distribution of shards. How you do that is up to you, but a good
+technique is to start by generating a statsrelay config that has many
+virtual shards evenly assigned, and then periodically have a script
+that finds which actual backends are overloaded and reassigns some of
+the virtual shards on those hosts to less loaded hosts (or to new
+hosts).
+
+If you don't initially assign enough virtual shards and then later
+expand to more, everything will work, but data migration for carbon
+will be a bit trickier; see below.
+
+## A Note On Carbon Scaling
+
+When you run statsrelay with the `--protocol=carbon` option it can do
+relaying for carbon lines just like statsd. The strategy for scaling
+carbon using virtual shards is exactly the same. One important
+difference, however, is that when you move a carbon shard you'll want
+to move the associated whisper files as well. You can do this using
+the `stathasher` binary that is built by statsrelay. By pointing that
+command at your statsrelay config, you can send it key names on stdin
+and have the virtual shard ids printed to stdout.
+
+Using this technique you can script the reassignment of whisper
+files. The general idea is to walk the filesystem and gather all of
+the unique keys stored in carbon backends on a host. You can then get
+an idea for how expensive each virtual shard is based on the storage
+space, number of whisper files, and possibly I/O metrics for each
+virtual shard. By gathering the weights for each virtual shard on a
+host, you can figure out the optimal way to redistribute the mapping
+of virtual shards to actual carbon backends.
+
+Note that when you move carbon instances, you also probably want to
+migrate the whisper files as well. This ensures that you retain
+historical data, and that graphite will get the right answer if it
+queries multiple carbon backends. You can migrate the whisper files by
+rsyncing the files you've identified as belonging to a moved virtual
+shard using the `stathasher` binary described above. Remember to take
+care to ensure that the old whisper files are deleted on the old host.
