@@ -55,7 +55,6 @@ int tcpclient_init(tcpclient_t *client,
 		   struct ev_loop *loop,
 		   void *callback_context,
 		   uint64_t max_send_queue) {
-	fprintf(stderr, "tcpclent_init: creating client %p\n", client);
 	client->state = STATE_INIT;
 	client->loop = loop;
 	client->sd = -1;
@@ -350,7 +349,6 @@ int tcpclient_sendall(tcpclient_t *client, const char *buf, size_t len) {
 }
 
 void tcpclient_destroy(tcpclient_t *client, int drop_queue) {
-	fprintf(stderr, "tcpclent_destroy: killing %p %d\n", client, drop_queue);
 	if (client == NULL) {
 		return;
 	}
@@ -375,6 +373,5 @@ void tcpclient_destroy(tcpclient_t *client, int drop_queue) {
 	if (client->addr != NULL) {
 		freeaddrinfo(client->addr);
 	}
-	fprintf(stderr, "in tcpclient destroying buffer %p\n", &client->send_queue);
 	buffer_destroy(&client->send_queue);
 }

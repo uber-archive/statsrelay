@@ -183,7 +183,6 @@ static void kill_backend(void *data) {
 		stats_debug_log("killing backend %s", backend->key);
 		free(backend->key);
 	}
-	fprintf(stderr, "killing backend %s %p, client = %p\n", backend->key, data, &backend->client);
 	tcpclient_destroy(&backend->client, 1);
 	free(backend);
 }
@@ -440,7 +439,6 @@ static int stats_process_lines(stats_session_t *session) {
 }
 
 void stats_session_destroy(stats_session_t *session) {
-	fprintf(stderr, "in stats session dstroy destroying buffer %p\n", &session->buffer);
 	buffer_destroy(&session->buffer);
 	free(session);
 }
