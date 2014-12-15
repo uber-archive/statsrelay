@@ -263,7 +263,7 @@ void stats_server_reload(stats_server_t *server) {
 }
 
 void *stats_connection(int sd, void *ctx) {
-
+	stats_session_t *session;
 
 	stats_debug_log("stats: accepted client connection on fd %d", sd);
 	session = (stats_session_t *) malloc(sizeof(stats_session_t));
@@ -327,7 +327,7 @@ void stats_send_statistics(stats_session_t *session) {
 
 	// TODO: this only needs to be allocated once, not every time we send
 	// statistics
-	response = create_buffer(MAX_UDP_LENGTH);
+	buffer_t *response = create_buffer(MAX_UDP_LENGTH);
 	if (response == NULL) {
 		stats_log("failed to allocate send_statistics buffer");
 		return;
