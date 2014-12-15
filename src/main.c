@@ -7,6 +7,7 @@
 #include "validate.h"
 
 #include <assert.h>
+#include <ctype.h>
 #include <inttypes.h>
 #include <signal.h>
 #include <string.h>
@@ -27,6 +28,7 @@ static struct option long_options[] = {
 	{"config",		required_argument,	NULL, 'c'},
 	{"bind",		required_argument,	NULL, 'b'},
 	{"verbose",		no_argument,		NULL, 'v'},
+	{"log-level",		required_argument,	NULL, 'l'},
 	{"protocol",		required_argument,	NULL, 'p'},
 	{"help",		no_argument,		NULL, 'h'},
 	{"max-send-queue",	required_argument,	NULL, 'q'},
@@ -35,7 +37,6 @@ static struct option long_options[] = {
 
 typedef struct statsrelay_options_t {
 	const char *filename;
-	int verbose;
 	uint64_t max_send_queue;
 	int validate_lines;
 } statsrelay_options_t;
@@ -89,12 +90,22 @@ static int choose_protocol(enum statsrelay_proto *protocol, const char *proto_st
 	return 1;
 }
 
+static char* to_lower(const char *input) {
+	char *output = strdup(input);
+	for (int i  = 0; output[i] != '\0'; i++) {
+		output[i] = tolower(output[i]);
+	}
+	return output;
+}
+
 static void print_help(const char *argv0) {
 	fprintf(stderr,
 		"Usage: %s [options]                                    \n"
 		"    --help                  Display this message\n"
 		"    --verbose               Write log messages to stderr in addition to syslog\n"
 		"    syslog\n"
+		"    --log-level             Set the logging level to DEBUG, INFO, WARN, or ERROR\n"
+		"    (default: INFO)\n"
 		"    --protocol=proto        Set mode as one of: statsd, carbon\n"
 		"    (default: %s)\n"
 		"    --bind=address[:port]   Bind to the given address and port\n"
@@ -119,16 +130,15 @@ int main(int argc, char **argv) {
 	statsrelay_options_t options;
 	char *address = NULL;
 	char *err;
+	char *lower;
 	int option_index = 0;
 	char c = 0;
 
-	stats_log(PACKAGE_STRING);
-
 	options.filename = NULL;
-	options.verbose = 0;
 	options.max_send_queue = default_max_send_queue;
 	options.validate_lines = 1;
 
+	stats_set_log_level(STATSRELAY_LOG_INFO);  // set default value
 	while (c != -1) {
 		c = getopt_long(argc, argv, "c:b:p:vh", long_options, &option_index);
 		switch (c) {
@@ -142,7 +152,23 @@ int main(int argc, char **argv) {
 			address = strdup(optarg);
 			break;
 		case 'v':
-			options.verbose = 1;
+			stats_log_verbose(true);
+			break;
+		case 'l':
+			lower = to_lower(optarg);
+			if (lower == NULL) {
+				fprintf(stderr, "main: unable to allocate memory\n");
+				goto err;
+			}
+			if (strcmp(lower, "debug") == 0) {
+				stats_set_log_level(STATSRELAY_LOG_DEBUG);
+				stats_log_verbose(true);
+			} else if (strcmp(lower, "warn") == 0) {
+				stats_set_log_level(STATSRELAY_LOG_WARN);
+			} else if (strcmp(lower, "error") == 0) {
+				stats_set_log_level(STATSRELAY_LOG_ERROR);
+			}
+			free(lower);
 			break;
 		case 'c':
 			if (access(optarg, R_OK)) {
@@ -163,10 +189,12 @@ int main(int argc, char **argv) {
 			}
 			break;
 		default:
-			stats_log("main: Unknown argument %c", c);
+			fprintf(stderr, "%s: Unknown argument %c", argv[0], c);
 			goto err;
 		}
 	}
+	stats_log(PACKAGE_STRING);
+
 	if (protocol == STATSRELAY_PROTO_UNKNOWN) {
 		// no --proto was passed via argv
 		if (choose_protocol(&protocol, default_protocol)) {
@@ -203,43 +231,44 @@ int main(int argc, char **argv) {
 		server = stats_server_create(options.filename, loop, protocol_parser_carbon, validate_carbon);
 		break;
 	default:
-		stats_log("main: unknown protocol!\n");
+		stats_error_log("main: unknown protocol!\n");
 		goto err;
 	}
 
 	if (server == NULL) {
-		stats_log("main: Unable to create stats_server");
+		stats_error_log("main: Unable to create stats_server", argv[0]);
 		goto err;
 	}
 	if (stats_num_backends(server) == 0) {
-		stats_log("main: unable to initialize backends from hashring; is \"%s\" a valid config file?", options.filename);
+		stats_error_log("main: unable to initialize backends from "
+				"hashring; is \"%s\" a valid config file?",
+				options.filename);
 		goto err;
 	}
 
 	ts = tcpserver_create(loop, server);
 	if (ts == NULL) {
-		stats_log("main: Unable to create tcpserver");
+		stats_error_log("main: Unable to create tcpserver");
 		goto err;
 	}
 
 	us = udpserver_create(loop, server);
 	if (us == NULL) {
-		stats_log("main: Unable to create udpserver");
+		stats_error_log("main: Unable to create udpserver");
 		goto err;
 	}
 
 	const char *default_port =\
 		protocol == STATSRELAY_PROTO_STATSD ? default_statsd_port : default_carbon_port;
 	if (tcpserver_bind(ts, address, default_port, stats_connection, stats_recv) != 0) {
-		stats_log("main: Unable to bind tcp %s", address);
+		stats_error_log("main: Unable to bind tcp %s", address);
 		goto err;
 	}
 	if (udpserver_bind(us, address, default_port, stats_udp_recv) != 0) {
-		stats_log("main: Unable to bind udp %s", address);
+		stats_error_log("main: Unable to bind udp %s", address);
 		goto err;
 	}
 
-	stats_log_verbose(options.verbose);
 	stats_set_max_send_queue(server, options.max_send_queue);
 	stats_set_validate_lines(server, options.validate_lines);
 
