@@ -6,12 +6,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', type=int, default=8125)
     parser.add_argument('-n', '--num-stats', type=int, default=0)
+    parser.add_argument('-r', '--reconnect-interval', type=int, default=0)
     parser.add_argument('--word-file')
     args = parser.parse_args()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect(('localhost', args.port))
 
+    reconn = args.reconnect_interval
     count = args.num_stats
     words = []
     if args.word_file:
@@ -36,6 +38,9 @@ if __name__ == '__main__':
             if count and x >= count:
                 break_out = True
                 break
-            sock.sendall('test:1|c\n')
+            elif reconn and x % reconn == 0:
+                sock.close()
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect(('localhost', args.port))
         if break_out:
             break

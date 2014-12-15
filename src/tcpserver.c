@@ -77,19 +77,6 @@ static tcpsession_t *tcpsession_create(tcplistener_t *listener) {
 }
 
 static void tcpsession_destroy(tcpsession_t *session) {
-	// FIXME: valgrind thinks there might be a memory leak here
-	// because we don't necessarily destroy session->ctx
-	// properly. Specifically the call stack is like this:
-	//
-	// ==8819==    by 0x401C45: buffer_init (buffer.c:30)
-	// ==8819==    by 0x404782: stats_connection (stats.c:275)
-	// ==8819==    by 0x4036AB: tcplistener_accept_callback (tcpserver.c:156)
-	//
-	// The issue here is that when we free(session) we also free
-	// the reference to the buffer created here.
-	//
-	// This could leak some data per connection.
-
 	if (session->sd > 0) {
 		close(session->sd);
 	}

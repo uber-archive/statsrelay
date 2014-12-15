@@ -183,6 +183,7 @@ static void kill_backend(void *data) {
 		stats_debug_log("killing backend %s", backend->key);
 		free(backend->key);
 	}
+	fprintf(stderr, "killing backend %s %p, client = %p\n", backend->key, data, &backend->client);
 	tcpclient_destroy(&backend->client, 1);
 	free(backend);
 }
@@ -263,7 +264,7 @@ void stats_server_reload(stats_server_t *server) {
 }
 
 void *stats_connection(int sd, void *ctx) {
-	stats_session_t *session;
+
 
 	stats_debug_log("stats: accepted client connection on fd %d", sd);
 	session = (stats_session_t *) malloc(sizeof(stats_session_t));
@@ -322,7 +323,6 @@ static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
 }
 
 void stats_send_statistics(stats_session_t *session) {
-	buffer_t *response;
 	stats_backend_t *backend;
 	ssize_t bytes_sent;
 
@@ -440,6 +440,7 @@ static int stats_process_lines(stats_session_t *session) {
 }
 
 void stats_session_destroy(stats_session_t *session) {
+	fprintf(stderr, "in stats session dstroy destroying buffer %p\n", &session->buffer);
 	buffer_destroy(&session->buffer);
 	free(session);
 }
