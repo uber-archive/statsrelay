@@ -3,7 +3,7 @@
 *.swp
 *.trs
 .deps
-.dirtimestamp
+.dirstamp
 Makefile
 Makefile.in
 aclocal.m4
@@ -20,6 +20,7 @@ perf.data
 src/stathasher
 src/statsrelay
 stamp-*
+stresstest
 test-driver
 test/devnull
 test_hashlib

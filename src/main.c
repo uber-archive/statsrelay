@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
 
 	stats_set_log_level(STATSRELAY_LOG_INFO);  // set default value
 	while (c != -1) {
-		c = getopt_long(argc, argv, "c:b:p:vh", long_options, &option_index);
+		c = getopt_long(argc, argv, "c:b:l:p:vh", long_options, &option_index);
 		switch (c) {
 		case -1:
 			break;
