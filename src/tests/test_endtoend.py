@@ -38,7 +38,7 @@ class ConfigTestCase(TestCase):
                               '127.0.0.1:8125',
                               '0.0.0.0:8125'):
             try:
-                proc = self.launch_process('--config=tests/statsrelay_tcp.conf',
+                proc = self.launch_process('--config=tests/hashring1.txt',
                                            '--bind=' + host_port_str)
                 s = socket.socket()
                 s.connect(('127.0.0.1', 8125))
@@ -63,7 +63,6 @@ class StatsdTestCase(TestCase):
 
         proc = self.launch_process('--config=tests/statsrelay_tcp.conf',
                                    '--bind=127.0.0.1:8125')
-        self.reload_process(proc)
 
         try:
             sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -100,10 +99,10 @@ class StatsdTestCase(TestCase):
                 backend, key, valuetype, value = line.split(' ', 3)
                 backend = backend.split(':', 1)[1]
                 backends[backend][key] = int(value)
-            self.assertEqual(backends['127.0.0.1:8126']['relayed_lines'], 4)
-            self.assertEqual(backends['127.0.0.1:8126']['dropped_lines'], 0)
-            self.assertEqual(backends['127.0.0.1:8126']['bytes_queued'],
-                             backends['127.0.0.1:8126']['bytes_sent'])
+            self.assertEqual(backends['127.0.0.1:8126:tcp']['relayed_lines'], 4)
+            self.assertEqual(backends['127.0.0.1:8126:tcp']['dropped_lines'], 0)
+            self.assertEqual(backends['127.0.0.1:8126:tcp']['bytes_queued'],
+                             backends['127.0.0.1:8126:tcp']['bytes_sent'])
 
             fd.close()
         finally:
@@ -150,10 +149,10 @@ class StatsdTestCase(TestCase):
                 backend, key, valuetype, value = line.split(' ', 3)
                 backend = backend.split(':', 1)[1]
                 backends[backend][key] = int(value)
-            self.assertEqual(backends['127.0.0.1:8126']['relayed_lines'], 4)
-            self.assertEqual(backends['127.0.0.1:8126']['dropped_lines'], 0)
-            self.assertEqual(backends['127.0.0.1:8126']['bytes_queued'],
-                             backends['127.0.0.1:8126']['bytes_sent'])
+            self.assertEqual(backends['127.0.0.1:8126:udp']['relayed_lines'], 4)
+            self.assertEqual(backends['127.0.0.1:8126:udp']['dropped_lines'], 0)
+            self.assertEqual(backends['127.0.0.1:8126:udp']['bytes_queued'],
+                             backends['127.0.0.1:8126:udp']['bytes_sent'])
 
             fd.close()
         finally:
@@ -162,6 +161,7 @@ class StatsdTestCase(TestCase):
 
 
 class CarbonTestCase(TestCase):
+
     def test_carbon(self):
         listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -208,10 +208,10 @@ class CarbonTestCase(TestCase):
                 backend, key, valuetype, value = line.split(' ', 3)
                 backend = backend.split(':', 1)[1]
                 backends[backend][key] = int(value)
-            self.assertEqual(backends['127.0.0.1:8126']['relayed_lines'], 5)
-            self.assertEqual(backends['127.0.0.1:8126']['dropped_lines'], 0)
-            self.assertEqual(backends['127.0.0.1:8126']['bytes_queued'],
-                             backends['127.0.0.1:8126']['bytes_sent'])
+            self.assertEqual(backends['127.0.0.1:8126:udp']['relayed_lines'], 5)
+            self.assertEqual(backends['127.0.0.1:8126:udp']['dropped_lines'], 0)
+            self.assertEqual(backends['127.0.0.1:8126:udp']['bytes_queued'],
+                             backends['127.0.0.1:8126:udp']['bytes_sent'])
 
             fd.close()
         finally:

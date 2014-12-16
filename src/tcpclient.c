@@ -2,20 +2,21 @@
 #include "buffer.h"
 #include "log.h"
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
 #include <errno.h>
 #include <fcntl.h>
-
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
+#include <netdb.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
 
-#include <glib.h>
 #include <ev.h>
+
+
+#define DEFAULT_BUFFER_SIZE (1<<16)
 
 
 static int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *context, char *data, size_t len) {
@@ -39,7 +40,10 @@ static void tcpclient_set_state(tcpclient_t *client, enum tcpclient_state state)
 
 static void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *watcher, int events) {
 	tcpclient_t *client = (tcpclient_t *)watcher->data;
-	ev_io_stop(loop, &client->connect_watcher);
+	if (client->connect_watcher.started) {
+		ev_io_stop(loop, &client->connect_watcher.watcher);
+		client->connect_watcher.started = false;
+	}
 
 	stats_log("tcpclient[%s]: Connection timeout", client->name);
 	client->last_error = time(NULL);
@@ -47,7 +51,10 @@ static void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *wat
 	client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 }
 
-int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_context, uint64_t max_send_queue) {
+int tcpclient_init(tcpclient_t *client,
+		   struct ev_loop *loop,
+		   void *callback_context,
+		   uint64_t max_send_queue) {
 	client->state = STATE_INIT;
 	client->loop = loop;
 	client->sd = -1;
@@ -64,9 +71,15 @@ int tcpclient_init(tcpclient_t *client, struct ev_loop *loop, void *callback_con
 	client->callback_error = &tcpclient_default_callback;
 	client->callback_context = callback_context;
 	buffer_init(&client->send_queue);
-	buffer_newsize(&client->send_queue, 67108864);	// Use a larger buffer so that we realign less often
-	ev_timer_init(&client->timeout_watcher, tcpclient_connect_timeout, TCPCLIENT_CONNECT_TIMEOUT, 0);
+	buffer_newsize(&client->send_queue, DEFAULT_BUFFER_SIZE);
+	ev_timer_init(&client->timeout_watcher,
+		      tcpclient_connect_timeout,
+		      TCPCLIENT_CONNECT_TIMEOUT,
+		      0);
 
+	client->connect_watcher.started = false;
+	client->read_watcher.started = false;
+	client->write_watcher.started = false;
 	return 0;
 }
 
@@ -91,8 +104,14 @@ static void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, in
 	len = recv(client->sd, buf, TCPCLIENT_RECV_BUFFER, 0);
 	if (len < 0) {
 		stats_log("tcpclient[%s]: Error from recv: %s", client->name, strerror(errno));
-		ev_io_stop(client->loop, &client->read_watcher);
-		ev_io_stop(client->loop, &client->write_watcher);
+		if (client->read_watcher.started) {
+			ev_io_stop(client->loop, &client->read_watcher.watcher);
+			client->read_watcher.started = false;
+		}
+		if (client->write_watcher.started) {
+			ev_io_stop(client->loop, &client->write_watcher.watcher);
+			client->write_watcher.started = false;
+		}
 		close(client->sd);
 		free(buf);
 		tcpclient_set_state(client, STATE_BACKOFF);
@@ -103,8 +122,8 @@ static void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, in
 
 	if (len == 0) {
 		stats_log("tcpclient[%s]: Server closed connection", client->name);
-		ev_io_stop(client->loop, &client->read_watcher);
-		ev_io_stop(client->loop, &client->write_watcher);
+		ev_io_stop(client->loop, &client->read_watcher.watcher);
+		ev_io_stop(client->loop, &client->write_watcher.watcher);
 		close(client->sd);
 		free(buf);
 		tcpclient_set_state(client, STATE_BACKOFF);
@@ -113,40 +132,43 @@ static void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, in
 		return;
 	}
 	client->callback_recv(client, EVENT_RECV, client->callback_context, buf, len);
+
 }
 
 
 static void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, int events) {
 	tcpclient_t *client = (tcpclient_t *)watcher->data;
 	buffer_t *sendq;
-	ssize_t len;
 
 	if (!(events & EV_WRITE)) {
 		return;
 	}
 
 	sendq = &client->send_queue;
-	len = buffer_datacount(sendq);
-	if (len > 0) {
-		len = send(client->sd, sendq->head, len, 0);
-		if (len < 0) {
+	ssize_t buf_len = buffer_datacount(sendq);
+	if (buf_len > 0) {
+		ssize_t send_len = send(client->sd, sendq->head, buf_len, 0);
+		stats_debug_log("tcpclient: sent %zd of %zd bytes to backend client %s via fd %d",
+				send_len, buf_len, client->name, client->sd);
+		if (send_len < 0) {
 			stats_log("tcpclient[%s]: Error from send: %s", client->name, strerror(errno));
-			ev_io_stop(client->loop, &client->write_watcher);
-			ev_io_stop(client->loop, &client->read_watcher);
+			ev_io_stop(client->loop, &client->write_watcher.watcher);
+			ev_io_stop(client->loop, &client->read_watcher.watcher);
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
 			close(client->sd);
 			client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 			return;
-		}
-
-		client->callback_sent(client, EVENT_SENT, client->callback_context, sendq->head, (size_t)len);
-		if (buffer_consume(sendq, len) != 0) {
-			stats_log("tcpclient[%s]: Unable to consume send queue", client->name);
-			return;
+		} else {
+			client->callback_sent(client, EVENT_SENT, client->callback_context, sendq->head, (size_t) send_len);
+			if (buffer_consume(sendq, send_len) != 0) {
+				stats_log("tcpclient[%s]: Unable to consume send queue", client->name);
+				return;
+			}
 		}
 	} else {
-		ev_io_stop(client->loop, &client->write_watcher);
+		ev_io_stop(client->loop, &client->write_watcher.watcher);
+		client->write_watcher.started = false;
 	}
 }
 
@@ -157,7 +179,7 @@ static void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int
 
 	// Cancel timeout timer
 	ev_timer_stop(loop, &client->timeout_watcher);
-	ev_io_stop(loop, &client->connect_watcher);
+	ev_io_stop(loop, &client->connect_watcher.watcher);
 
 	if (getsockopt(client->sd, SOL_SOCKET, SO_ERROR, &err, &len) != 0) {
 		stats_log("tcpclient[%s]: Unable to get socket error state: %s", client->name, strerror(errno));
@@ -175,12 +197,15 @@ static void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int
 	tcpclient_set_state(client, STATE_CONNECTED);
 
 	// Setup events for recv
-	client->read_watcher.data = client;
-	client->write_watcher.data = client;
-	ev_io_init(&client->read_watcher, tcpclient_read_event, client->sd, EV_READ);
-	ev_io_init(&client->write_watcher, tcpclient_write_event, client->sd, EV_WRITE);
-	ev_io_start(client->loop, &client->read_watcher);
-	ev_io_start(client->loop, &client->write_watcher);
+	client->read_watcher.started = true;
+	client->read_watcher.watcher.data = client;
+	ev_io_init(&client->read_watcher.watcher, tcpclient_read_event, client->sd, EV_READ);
+	ev_io_start(client->loop, &client->read_watcher.watcher);
+
+	client->write_watcher.started = true;
+	client->write_watcher.watcher.data = client;
+	ev_io_init(&client->write_watcher.watcher, tcpclient_write_event, client->sd, EV_WRITE);
+	ev_io_start(client->loop, &client->write_watcher.watcher);
 
 	client->callback_connect(client, EVENT_CONNECTED, client->callback_context, NULL, 0);
 }
@@ -228,16 +253,7 @@ int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, c
 				return 3;
 			}
 			client->addr = addr;
-
-			char hostname[TCPCLIENT_NAME_LEN - 8];
-			char servicename[8];
-			
-			if (getnameinfo(client->addr->ai_addr, client->addr->ai_addrlen, hostname, (TCPCLIENT_NAME_LEN - 8), servicename, 8, NI_NUMERICHOST) != 0) {
-				snprintf(client->name, TCPCLIENT_NAME_LEN, "%s/%s/%s", host, port, protocol);
-				stats_log("tcpclient: Unable to format backend address for logging, using config value %s (%s)", client->name, gai_strerror(errno));
-			} else {
-				snprintf(client->name, TCPCLIENT_NAME_LEN, "%s/%s/%s", hostname, servicename, protocol);
-			}
+			snprintf(client->name, TCPCLIENT_NAME_LEN, "%s/%s/%s", host, port, protocol);
 		} else {
 			addr = client->addr;
 		}
@@ -260,10 +276,11 @@ int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, c
 			return 5;
 		}
 
-		client->connect_watcher.data = client;
+		client->connect_watcher.started = true;
+		client->connect_watcher.watcher.data = client;
 		client->timeout_watcher.data = client;
-		ev_io_init(&client->connect_watcher, tcpclient_connected, sd, EV_WRITE);
-		ev_io_start(client->loop, &client->connect_watcher);
+		ev_io_init(&client->connect_watcher.watcher, tcpclient_connected, sd, EV_WRITE);
+		ev_io_start(client->loop, &client->connect_watcher.watcher);
 		ev_timer_set(&client->timeout_watcher, TCPCLIENT_CONNECT_TIMEOUT, 0);
 		ev_timer_start(client->loop, &client->timeout_watcher);
 
@@ -272,7 +289,7 @@ int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, c
 			client->last_error = time(NULL);
 			tcpclient_set_state(client, STATE_BACKOFF);
 			ev_timer_stop(client->loop, &client->timeout_watcher);
-			ev_io_stop(client->loop, &client->connect_watcher);
+			ev_io_stop(client->loop, &client->connect_watcher.watcher);
 			close(sd);
 			client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 			return 6;
@@ -325,19 +342,36 @@ int tcpclient_sendall(tcpclient_t *client, const char *buf, size_t len) {
 	buffer_produced(sendq, len);
 
 	if (client->state == STATE_CONNECTED) {
-		ev_io_start(client->loop, &client->write_watcher);
+		client->write_watcher.started = true;
+		ev_io_start(client->loop, &client->write_watcher.watcher);
 	}
 	return 0;
 }
 
 void tcpclient_destroy(tcpclient_t *client, int drop_queue) {
+	if (client == NULL) {
+		return;
+	}
 	ev_timer_stop(client->loop, &client->timeout_watcher);
-	ev_io_stop(client->loop, &client->connect_watcher);
-	ev_io_stop(client->loop, &client->read_watcher);
-	ev_io_stop(client->loop, &client->write_watcher);
-
-	buffer_destroy(&client->send_queue);
+	if (client->connect_watcher.started) {
+		stats_debug_log("tcpclient_destroy: stopping connect watcher");
+		ev_io_stop(client->loop, &client->connect_watcher.watcher);
+		client->connect_watcher.started = false;
+	}
+	if (client->read_watcher.started) {
+		stats_debug_log("tcpclient_destroy: stopping read watcher");
+		ev_io_stop(client->loop, &client->read_watcher.watcher);
+		client->read_watcher.started = false;
+	}
+	if (client->write_watcher.started) {
+		stats_debug_log("tcpclient_destroy: stopping write watcher");
+		ev_io_stop(client->loop, &client->write_watcher.watcher);
+		client->write_watcher.started = false;
+	}
+		stats_debug_log("closing client->sd %d", client->sd);
+	close(client->sd);
 	if (client->addr != NULL) {
 		freeaddrinfo(client->addr);
 	}
+	buffer_destroy(&client->send_queue);
 }

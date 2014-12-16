@@ -1,121 +1,41 @@
-#include "config.h"
-#include "ketama.h"
-#include "log.h"
-#include "stats.h"
-
-#include <signal.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
-#include <getopt.h>
-#include <glib.h>
-#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 
+#include "./hashring.h"
 
-static struct option long_options[] = {
-	{"config",			required_argument,	NULL, 'c'},
-	{"verbose",			no_argument,		NULL, 'v'},
-	{"help",			no_argument,		NULL, 'h'},
-};
-
-typedef struct statsrelay_options_t {
-	char *filename;
-	int verbose;
-} statsrelay_options_t;
-
-struct stats_server_t {
-	char *ketama_filename;
-	ketama_continuum kc;
-	GHashTable *backends;
-	GHashTable *ketama_cache;
-	struct ev_loop *loop;
-
-	uint64_t max_send_queue;
-	int validate_lines;
-
-	uint64_t bytes_recv_udp;
-	uint64_t bytes_recv_tcp;
-	uint64_t total_connections;
-	uint64_t malformed_lines;
-	time_t last_reload;
-};
-
-static stats_server_t *server = NULL;
-
-
-static void print_help(const char *argv0) {
-	fprintf(stderr, "Usage: %s [options] [FILENAME]                         \n\
-    --help                  Display this message                            \n\
-    --verbose               Write log messages to stderr in addition to     \n\
-                            syslog                                          \n\
-    --config=filename       Use the given ketama config file                \n\
-                            (default: /etc/statsrelay.conf)                 \n",
-		argv0);
+static void* my_strdup(const char *str, void *unused_data) {
+	return strdup(str);
 }
 
 int main(int argc, char **argv) {
-	statsrelay_options_t options;
-	int option_index = 0;
-	char c = 0;
-    FILE *input;
-    char *lineptr;
-    size_t linelen, len;
-    mcs *ks;
-
-	options.filename = "/etc/statsrelay.conf";
-	options.verbose = 0;
-
-	while (c != -1) {
-		c = getopt_long(argc, argv, "c:vh", long_options, &option_index);
-
-		switch (c) {
-			case -1:
-				break;
-			case 0:
-			case 'h':
-				print_help(argv[0]);
-				return 1;
-			case 'v':
-				options.verbose = 1;
-				break;
-			case 'c':
-				options.filename = optarg;
-				break;
-			default:
-				stats_log("main: Unknown argument %c", c);
-				return 3;
-		}
+	if (argc != 2) {
+		fprintf(stderr, "usage: %s /path/to/hash.txt\n", argv[0]);
+		return 1;
 	}
+	hashring_t ring = hashring_init(argv[1], 0, NULL, my_strdup, free);
 
-	server = stats_server_create(options.filename, NULL, NULL, NULL);
-
-	if (server == NULL) {
-		stats_log("main: Unable to create stats_server");
+	if (ring == NULL) {
+		fprintf(stderr, "failed to init with config file \"%s\"\n", argv[1]);
 		return 1;
 	}
 
-	stats_log_verbose(options.verbose);
+	char *line = NULL;
+	size_t len;
+	ssize_t bytes_read;
 
-    if (optind >= argc) {
-        input = stdin;
-    } else {
-        input = fopen(argv[optind], "r");
-        if (input == NULL) {
-            printf("Could not open %s", argv[optind]);
-            stats_log_end();
-            return 1;
-        }
-    }
-
-    lineptr = NULL;
-    while ((len = getline(&lineptr, &linelen, input)) != -1) {
-        lineptr[len-1] = '\0';
-        ks = ketama_get_server(lineptr, len, server->kc);
-        printf("%s\n", ks->ip);
-        free(lineptr);
-        lineptr = NULL;
-    }
-	stats_log_end();
+	while ((bytes_read = getline(&line, &len, stdin)) != -1) {
+		while (bytes_read > 0) {
+			if (isspace(line[bytes_read - 1])) {
+				line[bytes_read - 1] = '\0';
+				bytes_read--;
+			} else {
+				break;
+			}
+		}
+		printf("\"%s\" %s\n", line, (const char *) hashring_choose(ring, line, bytes_read));
+	}
+	free(line);
 	return 0;
 }

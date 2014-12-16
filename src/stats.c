@@ -12,24 +12,28 @@
 #include <stdio.h>
 #include <time.h>
 
-#include <glib.h>
-
-#include "ketama.h"
-
-#include "tcpclient.h"
-#include "buffer.h"
-#include "stats.h"
-#include "log.h"
-#include "validate.h"
+#include "./hashring.h"
+#include "./buffer.h"
+#include "./log.h"
+#include "./stats.h"
+#include "./tcpclient.h"
+#include "./validate.h"
 
 #define BACKEND_RETRY_TIMEOUT 5
 #define MAX_UDP_LENGTH 65536
 
+typedef struct {
+	tcpclient_t client;
+	char *key;
+	uint64_t bytes_queued;
+	uint64_t bytes_sent;
+	uint64_t relayed_lines;
+	uint64_t dropped_lines;
+	int failing;
+} stats_backend_t;
+
 struct stats_server_t {
-	const char *ketama_filename;
-	ketama_continuum kc;
-	GHashTable *backends;
-	GHashTable *ketama_cache;
+	char *config_filename;
 	struct ev_loop *loop;
 
 	uint64_t max_send_queue;
@@ -40,6 +44,11 @@ struct stats_server_t {
 	uint64_t total_connections;
 	uint64_t malformed_lines;
 	time_t last_reload;
+
+	size_t num_backends;
+	stats_backend_t **backend_list;
+
+	hashring_t ring;
 	protocol_parser_t parser;
 	validate_line_validator_t validator;
 };
@@ -50,23 +59,138 @@ typedef struct {
 	int sd;
 } stats_session_t;
 
-typedef struct {
-	tcpclient_t client;
-	char *key;
+// callback after bytes are sent
+static int stats_sent(void *tcpclient,
+		      enum tcpclient_event event,
+		      void *context,
+		      char *data,
+		      size_t len) {
+	stats_backend_t *backend = (stats_backend_t *) context;
+	backend->bytes_sent += len;
+	return 0;
+}
 
-	uint64_t bytes_queued;
-	uint64_t bytes_sent;
-	uint64_t relayed_lines;
-	uint64_t dropped_lines;
-	int failing;
-} stats_backend_t;
+// Add a backend to the backend list.
+static int add_backend(stats_server_t *server, stats_backend_t *backend) {
+	stats_backend_t **new_backends = realloc(server->backend_list,
+						 sizeof(stats_backend_t *) * (server->num_backends + 1));
+	if (new_backends == NULL) {
+		stats_log("add_backend: failed to realloc backends list");
+		return 1;
+	}
+	server->backend_list = new_backends;
+	server->backend_list[server->num_backends++] = backend;
+	return 0;
+}
+
+// Find a backend in the backend list; this is used so we don't create
+// duplicate backends. This is linear with the number of actual
+// backends in the file which should be fine for any reasonable
+// configuration (say, less than 10,000 backend statsite or carbon
+// servers). Also note that while this is linear, it only happens
+// during statsrelay initialization, not when running.
+static stats_backend_t *find_backend(stats_server_t *server, const char *key) {
+	for (size_t i = 0; i < server->num_backends; i++) {
+		stats_backend_t *backend = server->backend_list[i];
+		if (strcmp(backend->key, key) == 0) {
+			return backend;
+		}
+	}
+	return NULL;
+}
+
+// Make a backend, returning it from the backend list if it's already
+// been created.
+static void* make_backend(const char *host_and_port, void *data) {
+	stats_server_t *server = (stats_server_t *) data;
+	stats_backend_t *backend = find_backend(server, host_and_port);
+	if (backend != NULL) {
+		return backend;
+	}
+
+	char *host = NULL;
+	char *port = NULL;
+	char *protocol = NULL;
+
+	const char *colon1 = strchr(host_and_port, ':');
+	if (colon1 == NULL) {
+		stats_log("failed to parse host/port in \"%s\"", host_and_port);
+		goto make_err;
+	}
+	host = strndup(host_and_port, colon1 - host_and_port);
+	if (host == NULL) {
+		stats_log("stats: alloc error in host");
+		goto make_err;
+	}
+	const char *colon2 = strchr(colon1 + 1, ':');
+	if (colon2 == NULL) {
+		port = strdup(colon1 + 1);
+		protocol = strdup("tcp");  // use TCP by default
+	} else {
+		port = strndup(colon1 + 1, colon2 - colon1 - 1);
+		protocol = strdup(colon2 + 1);
+	}
+	if (port == NULL || protocol == NULL) {
+		stats_log("stats: alloc error in port/protocol");
+		goto make_err;
+	}
+
+	backend = malloc(sizeof(stats_backend_t));
+	if (backend == NULL) {
+		stats_log("stats: alloc error creating backend");
+		goto make_err;
+	}
+
+	if (tcpclient_init(&backend->client,
+			   server->loop,
+			   backend,
+			   server->max_send_queue)) {
+		stats_log("stats: failed to tcpclient_init");
+		goto make_err;
+	}
+
+	if (tcpclient_connect(&backend->client, host, port, protocol)) {
+		stats_log("stats: failed to conect tcpclient");
+		goto make_err;
+	}
+	backend->bytes_queued = 0;
+	backend->bytes_sent = 0;
+	backend->relayed_lines = 0;
+	backend->dropped_lines = 0;
+	backend->failing = 0;
+	backend->key = strdup(host_and_port);
+	tcpclient_set_sent_callback(&backend->client, stats_sent);
+	add_backend(server, backend);
+	stats_debug_log("initialized new backend %s", backend->key);
+
+	free(host);
+	free(port);
+	free(protocol);
+	return backend;
+
+make_err:
+	free(host);
+	free(port);
+	free(protocol);
+	free(backend);
+	return NULL;
+}
 
 
-stats_server_t *stats_server_create(
-		const char *filename,
-		struct ev_loop *loop,
-		protocol_parser_t parser,
-		validate_line_validator_t validator) {
+static void kill_backend(void *data) {
+	stats_backend_t *backend = (stats_backend_t *) data;
+	if (backend->key != NULL) {
+		stats_debug_log("killing backend %s", backend->key);
+		free(backend->key);
+	}
+	tcpclient_destroy(&backend->client, 1);
+	free(backend);
+}
+
+stats_server_t *stats_server_create(const char *filename,
+				    struct ev_loop *loop,
+				    protocol_parser_t parser,
+				    validate_line_validator_t validator) {
 	stats_server_t *server;
 
 	server = malloc(sizeof(stats_server_t));
@@ -76,77 +200,73 @@ stats_server_t *stats_server_create(
 	}
 
 	server->loop = loop;
-	server->backends = g_hash_table_new(g_str_hash, g_str_equal);
-	server->ketama_cache = g_hash_table_new_full(g_str_hash, g_str_equal, free, NULL);
-
-	server->ketama_filename = filename;
-	if (ketama_roll(&server->kc, (char *) filename) == 0) {
-		stats_log(ketama_error());
-		stats_log("stats: Unable to load ketama config from %s", filename);
+	server->config_filename = NULL;
+	if ((server->config_filename = strdup(filename)) == NULL) {
 		goto server_create_err;
 	}
+	server->num_backends = 0;
+	server->backend_list = NULL;
+	server->ring = hashring_init(
+		filename, 0, server, make_backend, kill_backend);
 
 	server->max_send_queue = 0;
-
 	server->bytes_recv_udp = 0;
 	server->bytes_recv_tcp = 0;
 	server->malformed_lines = 0;
 	server->total_connections = 0;
 	server->last_reload = 0;
 
-	assert(parser != NULL);
+	server->validate_lines = 1;
 	server->parser = parser;
 	server->validator = validator;
+
+	stats_debug_log("initialized server with %d backends, hashring size = %d",
+			server->num_backends, hashring_size(server->ring));
 
 	return server;
 
 server_create_err:
-	free(server);
+	if (server != NULL) {
+		free(server->config_filename);
+		hashring_dealloc(server->ring);
+		free(server);
+	}
 	return NULL;
 }
 
+size_t stats_num_backends(stats_server_t *server) {
+	return server->num_backends;
+}
+
+
 void stats_set_max_send_queue(stats_server_t *server, uint64_t size) {
 	server->max_send_queue = size;
+	for (size_t i = 0; i < server->num_backends; i++) {
+		server->backend_list[i]->client.max_send_queue = size;
+	}
 }
 
 void stats_set_validate_lines(stats_server_t *server, int validate_lines) {
 	server->validate_lines = validate_lines;
 }
 
-void stats_kill_backend(stats_server_t *server, stats_backend_t *backend) {
-	stats_log("stats: Killing backend %s", backend->key);
-	free(backend->key);
-	tcpclient_destroy(&backend->client, 1);
-}
-
-void stats_kill_all_backends(stats_server_t *server) {
-	GHashTableIter iter;
-	gpointer key, value;
-
-	g_hash_table_iter_init(&iter, server->backends);
-	while (g_hash_table_iter_next(&iter, &key, &value)) {
-		stats_kill_backend(server, value);
-		free(value);
-		g_hash_table_iter_remove(&iter);
-	}
-}
-
 void stats_server_reload(stats_server_t *server) {
-	if (ketama_roll(&server->kc, (char *) server->ketama_filename) == 0) {
-		stats_log(ketama_error());
-		stats_log("stats: Unable to reload ketama config from %s", server->ketama_filename);
-	}
-	stats_kill_all_backends(server);
-	g_hash_table_remove_all(server->ketama_cache);
-	stats_log("stats: Reloaded from %s", server->ketama_filename);
+	hashring_dealloc(server->ring);
+
+	free(server->backend_list);
+	server->num_backends = 0;
+	server->backend_list = NULL;
+
 	server->last_reload = time(NULL);
+	server->ring = hashring_init(
+		server->config_filename, 0, server, make_backend, kill_backend);
 }
 
 void *stats_connection(int sd, void *ctx) {
 	stats_session_t *session;
 
-	//stats_log("stats: Accepted connection on socket %i", sd);
-	session = (stats_session_t *)malloc(sizeof(stats_session_t));
+	stats_debug_log("stats: accepted client connection on fd %d", sd);
+	session = (stats_session_t *) malloc(sizeof(stats_session_t));
 	if (session == NULL) {
 		stats_log("stats: Unable to allocate memory");
 		return NULL;
@@ -158,105 +278,11 @@ void *stats_connection(int sd, void *ctx) {
 		return NULL;
 	}
 
-	session->server = (stats_server_t *)ctx;
+	session->server = (stats_server_t *) ctx;
 	session->server->total_connections++;
 	session->sd = sd;
-
-	return (void *)session;
+	return (void *) session;
 }
-
-int stats_sent(void *tcpclient, enum tcpclient_event event, void *context, char *data, size_t len) {
-	stats_backend_t *backend = (stats_backend_t *)context;
-	backend->bytes_sent += len;
-	return 0;
-}
-
-stats_backend_t *stats_get_backend(stats_server_t *server, const char *key, size_t keylen) {
-	stats_backend_t *backend;
-	char *address;
-	char *port;
-	char *protocol;
-	int ret;
-
-	size_t iplen;
-	char *ip;
-	char *pkey;
-	mcs *ks;
-
-	backend = g_hash_table_lookup(server->ketama_cache, key);
-	if (backend != NULL) {
-		return backend;
-	}
-
-	ks = ketama_get_server((char *)key, keylen, server->kc);
-	ip = ks->ip;
-	iplen = sizeof(ks->ip);
-
-	backend = g_hash_table_lookup(server->backends, ip);
-	if (backend == NULL) {
-		backend = malloc(sizeof(stats_backend_t));
-		if (backend == NULL) {
-			stats_log("stats: Cannot allocate memory for backend connection");
-			return NULL;
-		}
-
-		backend->bytes_queued = 0;
-		backend->bytes_sent = 0;
-		backend->relayed_lines = 0;
-		backend->dropped_lines = 0;
-		backend->failing = 0;
-
-		if (tcpclient_init(&backend->client, server->loop, (void *)backend, server->max_send_queue) != 0) {
-			stats_log("stats: Unable to initialize tcpclient");
-			free(backend);
-			return NULL;
-		};
-		tcpclient_set_sent_callback(&backend->client, stats_sent);
-		g_hash_table_insert(server->backends, ip, backend);
-
-		// Make a copy of the address because it's immutableish
-		address = malloc(iplen);
-		if (address == NULL) {
-			stats_log("stats: Unable to allocate memory for backend address");
-			return NULL;
-		}
-		memcpy(address, ip, iplen);
-		backend->key = address;
-
-		port = memchr(address, ':', iplen);
-		if (port == NULL) {
-			stats_log("stats: Unable to parse server address from config: %s", ip);
-			free(address);
-			return NULL;
-		}
-		port[0] = '\0';
-		port++;
-
-		protocol = memchr(port, ':', (port - address));
-		if (protocol != NULL) {
-			protocol[0] = '\0';
-			protocol++;
-		} else {
-			protocol = "tcp";
-		}
-
-		ret = tcpclient_connect(&backend->client, address, port, protocol);
-		if (ret != 0) {
-			stats_log("stats: Error connecting to [%s]:%s (tcpclient_connect returned %i)", address, port, ret);
-			free(address);
-			return NULL;
-		}
-
-		port--;
-		port[0] = ':';
-	}
-
-	pkey = malloc(keylen+1);
-	memcpy(pkey, key, keylen+1);
-	g_hash_table_insert(server->ketama_cache, pkey, backend);
-	return backend;
-}
-
 
 static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
 	if (ss->validate_lines && ss->validator != NULL) {
@@ -272,7 +298,7 @@ static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
 		return 1;
 	}
 
-	stats_backend_t *backend = stats_get_backend(ss, line, key_len);
+	stats_backend_t *backend = hashring_choose(ss->ring, line, key_len);
 
 	if (backend == NULL) {
 		return 1;
@@ -289,22 +315,19 @@ static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
 		backend->failing = 0;
 	}
 
-	backend->bytes_queued += len+1;
+	backend->bytes_queued += len + 1;
 	backend->relayed_lines++;
 
 	return 0;
 }
 
 void stats_send_statistics(stats_session_t *session) {
-	GHashTableIter iter;
-	gpointer key, value;
-	buffer_t *response;
 	stats_backend_t *backend;
 	ssize_t bytes_sent;
 
 	// TODO: this only needs to be allocated once, not every time we send
 	// statistics
-	response = create_buffer(MAX_UDP_LENGTH);
+	buffer_t *response = create_buffer(MAX_UDP_LENGTH);
 	if (response == NULL) {
 		stats_log("failed to allocate send_statistics buffer");
 		return;
@@ -335,9 +358,8 @@ void stats_send_statistics(stats_session_t *session) {
 		"global malformed_lines counter %" PRIu64 "\n",
 		session->server->malformed_lines));
 
-	g_hash_table_iter_init(&iter, session->server->backends);
-	while (g_hash_table_iter_next(&iter, &key, &value)) {
-		backend = (stats_backend_t *)value;
+	for (size_t i = 0; i < session->server->num_backends; i++) {
+		backend = session->server->backend_list[i];
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
@@ -358,7 +380,7 @@ void stats_send_statistics(stats_session_t *session) {
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
 			"backend:%s dropped_lines counter %" PRIu64 "\n",
 			backend->key, backend->dropped_lines));
-		
+
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
 			"backend:%s failing boolean %i\n",
@@ -427,8 +449,9 @@ int stats_recv(int sd, void *data, void *ctx) {
 	ssize_t bytes_read;
 	size_t space;
 
-	// First we try to realign the buffer (memmove so that head and ptr match)
-	// If that fails, we double the size of the buffer
+	// First we try to realign the buffer (memmove so that head
+	// and ptr match) If that fails, we double the size of the
+	// buffer
 	space = buffer_spacecount(&session->buffer);
 	if (space == 0) {
 		buffer_realign(&session->buffer);
@@ -436,8 +459,7 @@ int stats_recv(int sd, void *data, void *ctx) {
 		if (space == 0) {
 			if (buffer_expand(&session->buffer) != 0) {
 				stats_log("stats: Unable to expand buffer, aborting");
-				stats_session_destroy(session);
-				return 1;
+				goto stats_recv_err;
 			}
 			space = buffer_spacecount(&session->buffer);
 		}
@@ -446,31 +468,31 @@ int stats_recv(int sd, void *data, void *ctx) {
 	bytes_read = recv(sd, buffer_tail(&session->buffer), space, 0);
 	if (bytes_read < 0) {
 		stats_log("stats: Error receiving from socket: %s", strerror(errno));
-		stats_session_destroy(session);
-		return 2;
-	}
-
-	if (bytes_read == 0) {
-		//stats_log("stats: Client closed connection");
-		stats_session_destroy(session);
-		return 3;
+		goto stats_recv_err;
+	} else if (bytes_read == 0) {
+		stats_debug_log("stats: client from fd %d closed conncetion", sd);
+		goto stats_recv_err;
+	} else {
+		stats_debug_log("stats: received %zd bytes from tcp client fd %d", bytes_read, sd);
 	}
 
 	session->server->bytes_recv_tcp += bytes_read;
 
 	if (buffer_produced(&session->buffer, bytes_read) != 0) {
 		stats_log("stats: Unable to produce buffer by %i bytes, aborting", bytes_read);
-		stats_session_destroy(session);
-		return 4;
+		goto stats_recv_err;
 	}
 
 	if (stats_process_lines(session) != 0) {
 		stats_log("stats: Invalid line processed, closing connection");
-		stats_session_destroy(session);
-		return 5;
+		goto stats_recv_err;
 	}
 
 	return 0;
+
+stats_recv_err:
+	stats_session_destroy(session);
+	return 1;
 }
 
 // TODO: refactor this whole method to share more code with the tcp receiver:
@@ -502,6 +524,8 @@ int stats_udp_recv(int sd, void *data) {
 			stats_log("stats: Error calling recvfrom: %s", strerror(errno));
 			goto udp_recv_err;
 		}
+	} else {
+		stats_debug_log("stats: received %zd bytes from udp fd %d", bytes_read, sd);
 	}
 
 	if (buffer_produced(buffer, bytes_read) != 0) {
@@ -527,7 +551,7 @@ int stats_udp_recv(int sd, void *data) {
 		if (stats_relay_line(line_buffer, len, ss) != 0) {
 			goto udp_recv_err;
 		}
-		buffer_consume(buffer, len + 1);	// Add 1 to include the '\n'
+		buffer_consume(buffer, len + 1);  // Add 1 to include the '\n'
 	}
 
 	len = buffer_datacount(buffer);
@@ -546,12 +570,9 @@ udp_recv_err:
 }
 
 void stats_server_destroy(stats_server_t *server) {
-	stats_kill_all_backends(server);
-	g_hash_table_destroy(server->ketama_cache);
-	g_hash_table_destroy(server->backends);
-
-	ketama_smoke(server->kc);
+	hashring_dealloc(server->ring);
+	free(server->backend_list);
+	server->num_backends = 0;
+	free(server->config_filename);
 	free(server);
 }
-
-
