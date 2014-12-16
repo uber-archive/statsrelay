@@ -3,6 +3,7 @@
 #include "./hashlib.h"
 #include "./log.h"
 
+#include <ctype.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -40,11 +41,11 @@ hashring_t hashring_init(const char *hashfile,
 		}
 	}
 	while ((read = getline(&line, &len, hash_file)) != -1) {
-		// strip the trailing newline
-		if (line[read] == '\n') {
-			line[read] = '\0';
-		} else if (read && line[read - 1] == '\n') {
-			line[read - 1] = '\0';
+		for (size_t i = 0; i < len; i++) {
+			if (isspace(line[i])) {
+				line[i] = '\0';
+				break;
+			}
 		}
 
 		// expand the hashing
