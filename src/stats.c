@@ -33,7 +33,6 @@ typedef struct {
 } stats_backend_t;
 
 struct stats_server_t {
-	char *config_filename;
 	struct ev_loop *loop;
 
 	uint64_t max_send_queue;
@@ -72,8 +71,8 @@ static int stats_sent(void *tcpclient,
 
 // Add a backend to the backend list.
 static int add_backend(stats_server_t *server, stats_backend_t *backend) {
-	stats_backend_t **new_backends = realloc(server->backend_list,
-						 sizeof(stats_backend_t *) * (server->num_backends + 1));
+	stats_backend_t **new_backends = realloc(
+		server->backend_list, sizeof(stats_backend_t *) * (server->num_backends + 1));
 	if (new_backends == NULL) {
 		stats_log("add_backend: failed to realloc backends list");
 		return 1;
@@ -102,12 +101,11 @@ static stats_backend_t *find_backend(stats_server_t *server, const char *key) {
 // Make a backend, returning it from the backend list if it's already
 // been created.
 static void* make_backend(const char *host_and_port, void *data) {
-	stats_server_t *server = (stats_server_t *) data;
-	stats_backend_t *backend = find_backend(server, host_and_port);
-	if (backend != NULL) {
-		return backend;
-	}
+	stats_backend_t *backend = NULL;
+	char *full_key = NULL;
 
+	// First we normalize so that the key is in the format
+	// host:port:protocol
 	char *host = NULL;
 	char *port = NULL;
 	char *protocol = NULL;
@@ -135,6 +133,31 @@ static void* make_backend(const char *host_and_port, void *data) {
 		goto make_err;
 	}
 
+	if (colon2 == NULL) {
+		const size_t hp_len = strlen(host_and_port);
+		const size_t space_needed = hp_len + strlen(protocol) + 2;
+		full_key = malloc(space_needed);
+		if (full_key != NULL && snprintf(full_key, space_needed, "%s:%s", host_and_port, protocol) < 0) {
+			stats_error_log("failed to snprintf");
+			goto make_err;
+		}
+	} else {
+		full_key = strdup(host_and_port);
+	}
+	if (full_key == NULL) {
+		stats_error_log("failed to create backend key");
+	}
+
+	// Find the key in our list of backends
+	stats_server_t *server = (stats_server_t *) data;
+	backend = find_backend(server, full_key);
+	if (backend != NULL) {
+		free(host);
+		free(port);
+		free(protocol);
+		free(full_key);
+		return backend;
+	}
 	backend = malloc(sizeof(stats_backend_t));
 	if (backend == NULL) {
 		stats_log("stats: alloc error creating backend");
@@ -158,7 +181,7 @@ static void* make_backend(const char *host_and_port, void *data) {
 	backend->relayed_lines = 0;
 	backend->dropped_lines = 0;
 	backend->failing = 0;
-	backend->key = strdup(host_and_port);
+	backend->key = full_key;
 	tcpclient_set_sent_callback(&backend->client, stats_sent);
 	add_backend(server, backend);
 	stats_debug_log("initialized new backend %s", backend->key);
@@ -172,7 +195,7 @@ make_err:
 	free(host);
 	free(port);
 	free(protocol);
-	free(backend);
+	free(full_key);
 	return NULL;
 }
 
@@ -187,36 +210,35 @@ static void kill_backend(void *data) {
 	free(backend);
 }
 
-stats_server_t *stats_server_create(const char *filename,
-				    struct ev_loop *loop,
+stats_server_t *stats_server_create(struct ev_loop *loop,
+				    struct proto_config *config,
 				    protocol_parser_t parser,
 				    validate_line_validator_t validator) {
 	stats_server_t *server;
-
 	server = malloc(sizeof(stats_server_t));
 	if (server == NULL) {
 		stats_log("stats: Unable to allocate memory");
-		goto server_create_err;
+		return NULL;
 	}
 
 	server->loop = loop;
-	server->config_filename = NULL;
-	if ((server->config_filename = strdup(filename)) == NULL) {
-		goto server_create_err;
-	}
 	server->num_backends = 0;
 	server->backend_list = NULL;
-	server->ring = hashring_init(
-		filename, 0, server, make_backend, kill_backend);
+	server->max_send_queue = config->max_send_queue;
+	server->ring = hashring_load_from_config(
+		config, server, make_backend, kill_backend);
+	if (server->ring == NULL) {
+		stats_error_log("hashring_load_from_config failed");
+		goto server_create_err;
+	}
 
-	server->max_send_queue = 0;
 	server->bytes_recv_udp = 0;
 	server->bytes_recv_tcp = 0;
 	server->malformed_lines = 0;
 	server->total_connections = 0;
 	server->last_reload = 0;
 
-	server->validate_lines = 1;
+	server->validate_lines = config->enable_validation;
 	server->parser = parser;
 	server->validator = validator;
 
@@ -227,7 +249,6 @@ stats_server_t *stats_server_create(const char *filename,
 
 server_create_err:
 	if (server != NULL) {
-		free(server->config_filename);
 		hashring_dealloc(server->ring);
 		free(server);
 	}
@@ -238,18 +259,6 @@ size_t stats_num_backends(stats_server_t *server) {
 	return server->num_backends;
 }
 
-
-void stats_set_max_send_queue(stats_server_t *server, uint64_t size) {
-	server->max_send_queue = size;
-	for (size_t i = 0; i < server->num_backends; i++) {
-		server->backend_list[i]->client.max_send_queue = size;
-	}
-}
-
-void stats_set_validate_lines(stats_server_t *server, int validate_lines) {
-	server->validate_lines = validate_lines;
-}
-
 void stats_server_reload(stats_server_t *server) {
 	hashring_dealloc(server->ring);
 
@@ -258,8 +267,8 @@ void stats_server_reload(stats_server_t *server) {
 	server->backend_list = NULL;
 
 	server->last_reload = time(NULL);
-	server->ring = hashring_init(
-		server->config_filename, 0, server, make_backend, kill_backend);
+
+	// FIXME
 }
 
 void *stats_connection(int sd, void *ctx) {
@@ -291,14 +300,17 @@ static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
 		}
 	}
 
+	static char key_buffer[8192];
 	size_t key_len = ss->parser(line, len);
 	if (key_len == 0) {
 		ss->malformed_lines++;
 		stats_log("stats: failed to find key: \"%s\"", line);
 		return 1;
 	}
+	memcpy(key_buffer, line, key_len);
+	key_buffer[key_len] = '\0';
 
-	stats_backend_t *backend = hashring_choose(ss->ring, line, key_len);
+	stats_backend_t *backend = hashring_choose(ss->ring, key_buffer, NULL);
 
 	if (backend == NULL) {
 		return 1;
@@ -573,6 +585,5 @@ void stats_server_destroy(stats_server_t *server) {
 	hashring_dealloc(server->ring);
 	free(server->backend_list);
 	server->num_backends = 0;
-	free(server->config_filename);
 	free(server);
 }

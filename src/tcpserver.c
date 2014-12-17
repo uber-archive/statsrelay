@@ -266,7 +266,6 @@ static void tcplistener_destroy(tcpserver_t *server, tcplistener_t *listener) {
 
 int tcpserver_bind(tcpserver_t *server,
 		   const char *address_and_port,
-		   const char *default_port,
 		   void *(*cb_conn)(int, void *),
 		   int (*cb_recv)(int, void *, void *)) {
 	tcplistener_t *listener;
@@ -276,16 +275,18 @@ int tcpserver_bind(tcpserver_t *server,
 
 	char *address = strdup(address_and_port);
 	if (address == NULL) {
-		stats_log("tcpserver: strdup(3) failed");
+		stats_error_log("tcpserver: strdup(3) failed");
 		return 1;
 	}
 
 	char *ptr = strrchr(address_and_port, ':');
-	const char *port = ptr == NULL ? default_port : ptr + 1;
-
-	if (ptr != NULL) {
-		address[ptr - address_and_port] = '\0';
+	if (ptr == NULL) {
+		free(address);
+		stats_error_log("tcpserver: missing port");
+		return 1;
 	}
+	const char *port = ptr + 1;
+	address[ptr - address_and_port] = '\0';
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;

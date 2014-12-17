@@ -2,72 +2,36 @@
 #include "protocol.h"
 #include "tcpserver.h"
 #include "udpserver.h"
+#include "server.h"
 #include "stats.h"
 #include "log.h"
 #include "validate.h"
+#include "yaml_config.h"
 
 #include <assert.h>
 #include <ctype.h>
+#include <ev.h>
+#include <getopt.h>
 #include <inttypes.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <getopt.h>
-#include <ev.h>
 
-enum statsrelay_proto {
-	STATSRELAY_PROTO_UNKNOWN = 0,
-	STATSRELAY_PROTO_STATSD = 1,
-	STATSRELAY_PROTO_CARBON = 2
-};
-
+struct server_collection servers;
 
 static struct option long_options[] = {
 	{"config",		required_argument,	NULL, 'c'},
-	{"bind",		required_argument,	NULL, 'b'},
 	{"verbose",		no_argument,		NULL, 'v'},
 	{"log-level",		required_argument,	NULL, 'l'},
-	{"protocol",		required_argument,	NULL, 'p'},
 	{"help",		no_argument,		NULL, 'h'},
-	{"max-send-queue",	required_argument,	NULL, 'q'},
-	{"no-validation",	no_argument,		NULL, 'n'},
 };
 
-typedef struct statsrelay_options_t {
-	const char *filename;
-	uint64_t max_send_queue;
-	int validate_lines;
-} statsrelay_options_t;
-
-static stats_server_t *server = NULL;
-static tcpserver_t *ts = NULL;
-static udpserver_t *us = NULL;
-static struct ev_loop *loop = NULL;
-
-static const char default_protocol[] = "statsd";
-
-static const char default_statsd_port[] = "8125";
-static const char default_statsd_config[] = "/etc/statsrelay.conf";
-
-static const char default_carbon_port[] = "2003";
-static const char default_carbon_config[] = "/etc/carbonrelay.conf";
-
-static const uint64_t default_max_send_queue = 134217728;
+static const char default_config[] = "/etc/statsrelay.yaml";
 
 static void graceful_shutdown(struct ev_loop *loop, ev_signal *w, int revents) {
 	stats_log("Received signal, shutting down.");
-
-	if (ts != NULL) {
-		tcpserver_destroy(ts);
-	}
-	if (us != NULL) {
-		udpserver_destroy(us);
-	}
-	if (server != NULL) {
-		stats_server_destroy(server);
-	}
+	destroy_server_collection(&servers);
 	ev_break(loop, EVBREAK_ALL);
 }
 
@@ -76,18 +40,6 @@ static void reload_config(struct ev_loop *loop, ev_signal *w, int revents) {
 	if (server != NULL) {
 		stats_server_reload(server);
 	}
-}
-
-
-static int choose_protocol(enum statsrelay_proto *protocol, const char *proto_string) {
-	if (strcmp(proto_string, "statsd") == 0) {
-		*protocol = STATSRELAY_PROTO_STATSD;
-		return 0;
-	} else if (strcmp(proto_string, "carbon") == 0) {
-		*protocol = STATSRELAY_PROTO_CARBON;
-		return 0;
-	}
-	return 1;
 }
 
 static char* to_lower(const char *input) {
@@ -106,41 +58,22 @@ static void print_help(const char *argv0) {
 		"    syslog\n"
 		"    --log-level             Set the logging level to DEBUG, INFO, WARN, or ERROR\n"
 		"    (default: INFO)\n"
-		"    --protocol=proto        Set mode as one of: statsd, carbon\n"
-		"    (default: %s)\n"
-		"    --bind=address[:port]   Bind to the given address and port\n"
-		"    (default: *:%s or *:%s)\n"
 		"    --config=filename       Use the given hashring config file\n"
-		"    (default: %s or %s)\n"
-		"    --max-send-queue=BYTES  Limit each backend connection's send queue to\n"
-		"    the given size. (default: %" PRIu64 ")\n"
-		"    --no-validation         Disable parsing of stat values. Relayed metrics\n"
-		"    may not actually be valid past the ':' character\n"
-		"    (default: validation is enabled)                \n",
+		"    (default: %s)\n",
 		argv0,
-		default_protocol,
-		default_statsd_port, default_carbon_port,
-		default_statsd_config, default_carbon_config,
-		default_max_send_queue);
+		default_config);
 }
 
 int main(int argc, char **argv) {
-	enum statsrelay_proto protocol = STATSRELAY_PROTO_UNKNOWN;
 	ev_signal sigint_watcher, sigterm_watcher, sighup_watcher;
-	statsrelay_options_t options;
-	char *address = NULL;
-	char *err;
 	char *lower;
 	int option_index = 0;
 	char c = 0;
-
-	options.filename = NULL;
-	options.max_send_queue = default_max_send_queue;
-	options.validate_lines = 1;
+	servers.initialized = false;
 
 	stats_set_log_level(STATSRELAY_LOG_INFO);  // set default value
 	while (c != -1) {
-		c = getopt_long(argc, argv, "c:b:l:p:vh", long_options, &option_index);
+		c = getopt_long(argc, argv, "c:l:vh", long_options, &option_index);
 		switch (c) {
 		case -1:
 			break;
@@ -148,9 +81,6 @@ int main(int argc, char **argv) {
 		case 'h':
 			print_help(argv[0]);
 			return 1;
-		case 'b':
-			address = strdup(optarg);
-			break;
 		case 'v':
 			stats_log_verbose(true);
 			break;
@@ -171,22 +101,7 @@ int main(int argc, char **argv) {
 			free(lower);
 			break;
 		case 'c':
-			if (access(optarg, R_OK)) {
-				stats_log("can't read config file at \"%s\"", optarg);
-				goto err;
-			}
-			options.filename = optarg;
-			break;
-		case 'q':
-			options.max_send_queue = strtoull(optarg, &err, 10);
-			break;
-		case 'n':
-			options.validate_lines = 0;
-			break;
-		case 'p':
-			if (choose_protocol(&protocol, optarg)) {
-				goto err;
-			}
+			init_server_collection(&servers, optarg);
 			break;
 		default:
 			fprintf(stderr, "%s: Unknown argument %c", argv[0], c);
@@ -195,25 +110,26 @@ int main(int argc, char **argv) {
 	}
 	stats_log(PACKAGE_STRING);
 
-	if (protocol == STATSRELAY_PROTO_UNKNOWN) {
-		// no --proto was passed via argv
-		if (choose_protocol(&protocol, default_protocol)) {
-			goto err;
-		}
-	}
-	assert(protocol == STATSRELAY_PROTO_STATSD || protocol == STATSRELAY_PROTO_CARBON);
-	if (options.filename == NULL) {
-		options.filename = \
-			protocol == STATSRELAY_PROTO_STATSD ? default_statsd_config : default_carbon_config;
+	if (!servers.initialized) {
+		init_server_collection(&servers, default_config);
 	}
 
-	if (address == NULL) {
-		address = malloc(2);
-		memcpy(address, "*\0", 2);
+	FILE *file_handle = fopen(servers.config_file, "r");
+	if (file_handle == NULL) {
+		stats_error_log("failed to open file %s", servers.config_file);
+		goto err;
 	}
+	struct config *cfg = parse_config(file_handle);
+	fclose(file_handle);
 
-	loop = ev_default_loop(0);
+	if (cfg == NULL) {
+		stats_error_log("failed to parse config");
+		goto err;
+	}
+	connect_server_collection(&servers, cfg);
+	destroy_config(cfg);
 
+	struct ev_loop *loop = ev_default_loop(0);
 	ev_signal_init(&sigint_watcher, graceful_shutdown, SIGINT);
 	ev_signal_start(loop, &sigint_watcher);
 
@@ -223,64 +139,15 @@ int main(int argc, char **argv) {
 	ev_signal_init(&sighup_watcher, reload_config, SIGHUP);
 	ev_signal_start(loop, &sighup_watcher);
 
-	switch (protocol) {
-	case STATSRELAY_PROTO_STATSD:
-		server = stats_server_create(options.filename, loop, protocol_parser_statsd, validate_statsd);
-		break;
-	case STATSRELAY_PROTO_CARBON:
-		server = stats_server_create(options.filename, loop, protocol_parser_carbon, validate_carbon);
-		break;
-	default:
-		stats_error_log("main: unknown protocol!\n");
-		goto err;
-	}
-
-	if (server == NULL) {
-		stats_error_log("main: Unable to create stats_server", argv[0]);
-		goto err;
-	}
-	if (stats_num_backends(server) == 0) {
-		stats_error_log("main: unable to initialize backends from "
-				"hashring; is \"%s\" a valid config file?",
-				options.filename);
-		goto err;
-	}
-
-	ts = tcpserver_create(loop, server);
-	if (ts == NULL) {
-		stats_error_log("main: Unable to create tcpserver");
-		goto err;
-	}
-
-	us = udpserver_create(loop, server);
-	if (us == NULL) {
-		stats_error_log("main: Unable to create udpserver");
-		goto err;
-	}
-
-	const char *default_port =\
-		protocol == STATSRELAY_PROTO_STATSD ? default_statsd_port : default_carbon_port;
-	if (tcpserver_bind(ts, address, default_port, stats_connection, stats_recv) != 0) {
-		stats_error_log("main: Unable to bind tcp %s", address);
-		goto err;
-	}
-	if (udpserver_bind(us, address, default_port, stats_udp_recv) != 0) {
-		stats_error_log("main: Unable to bind udp %s", address);
-		goto err;
-	}
-
-	stats_set_max_send_queue(server, options.max_send_queue);
-	stats_set_validate_lines(server, options.validate_lines);
-
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);
 
+	destroy_server_collection(&servers);
 	stats_log_end();
-	free(address);
 	return 0;
 
 err:
+	destroy_server_collection(&servers);
 	stats_log_end();
-	free(address);
 	return 1;
 }

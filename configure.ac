@@ -8,5 +8,6 @@ AC_CONFIG_FILES([
  src/Makefile
 ])
 AC_CHECK_LIB([ev], [ev_run])
+AC_CHECK_LIB([yaml], [yaml_parser_initialize])
 AC_REVISION([m4_esyscmd_s([git describe --always])])
 AC_OUTPUT

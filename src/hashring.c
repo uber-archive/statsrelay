@@ -1,103 +1,96 @@
 #include "./hashring.h"
 
 #include "./hashlib.h"
+#include "./list.h"
 #include "./log.h"
 
-#include <ctype.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <string.h>
 
 struct hashring {
-	size_t size;
-	void **backends;
+	list_t backends;
+	void *alloc_data;
+	hashring_alloc_func alloc;
 	hashring_dealloc_func dealloc;
 };
 
-hashring_t hashring_init(const char *hashfile,
-			 size_t expected_size,
-			 void *alloc_data,
+hashring_t hashring_init(void *alloc_data,
 			 hashring_alloc_func alloc,
 			 hashring_dealloc_func dealloc) {
-	FILE *hash_file;
-	if ((hash_file = fopen(hashfile, "r")) == NULL) {
+	struct hashring *ring = malloc(sizeof(struct hashring));
+	if (ring == NULL) {
+		stats_error_log("failure to malloc() in hashring_init");
 		return NULL;
 	}
-
-	struct hashring *ring = malloc(sizeof(struct hashring));
-	ring->backends = NULL;
-	ring->size = 0;
+	ring->backends = statsrelay_list_new();
+	ring->alloc_data = alloc_data;
+	ring->alloc = alloc;
 	ring->dealloc = dealloc;
-
-	char *line = NULL;
-	size_t len = 0;
-	ssize_t read;
-
-	if (expected_size) {
-		if ((ring->backends = malloc(sizeof(void *) * expected_size)) == NULL) {
-			goto init_err;
-		}
-	}
-	while ((read = getline(&line, &len, hash_file)) != -1) {
-		for (size_t i = 0; i < len; i++) {
-			if (isspace(line[i])) {
-				line[i] = '\0';
-				break;
-			}
-		}
-
-		// expand the hashing
-		void *obj = alloc(line, alloc_data);
-		if (obj == NULL) {
-			stats_log("hashring: failed to alloc after reading line \"%s\"", line);
-			goto init_err;
-		}
-		if (!expected_size) {
-			void *new_backends = realloc(
-				ring->backends, sizeof(void *) * (ring->size + 1));
-			if (new_backends == NULL) {
-				goto init_err;
-			}
-			ring->backends = new_backends;
-		}
-		ring->backends[ring->size++] = obj;
-	}
-
-	if (expected_size && ring->size != expected_size) {
-		stats_log("hashring: fatal error in init, expected %d lines but actually saw %d lines",
-			  expected_size, ring->size);
-		goto init_err;
-	}
-
-	free(line);
-	fclose(hash_file);
 	return ring;
+}
 
-init_err:
-	free(line);
-	fclose(hash_file);
-	hashring_dealloc(ring);
-	return NULL;
+hashring_t hashring_load_from_config(struct proto_config *pc,
+				     void *alloc_data,
+				     hashring_alloc_func alloc_func,
+				     hashring_dealloc_func dealloc_func) {
+	hashring_t ring = hashring_init(alloc_data, alloc_func, dealloc_func);
+	if (ring == NULL) {
+		stats_error_log("failed to hashring_init");
+		return NULL;
+	}
+	for (size_t i = 0; i < pc->ring->size; i++) {
+		if (!hashring_add(ring, pc->ring->data[i])) {
+			hashring_dealloc(ring);
+			return NULL;
+		}
+	}
+	return ring;
+}
+
+bool hashring_add(hashring_t ring, const char *line) {
+	// allocate an object
+	void *obj = ring->alloc(line, ring->alloc_data);
+	if (obj == NULL) {
+		stats_error_log("hashring: failed to alloc line \"%s\"", line);
+		goto add_err;
+	}
+
+	// grow the list
+	if (statsrelay_list_expand(ring->backends) == NULL) {
+		stats_error_log("hashring: failed to expand list");
+		ring->dealloc(obj);
+		goto add_err;
+	}
+
+	ring->backends->data[ring->backends->size - 1] = obj;
+	return true;
+
+add_err:
+	return false;
 }
 
 size_t hashring_size(hashring_t ring) {
 	if (ring == NULL) {
 		return 0;
 	}
-	return ring->size;
+	return ring->backends->size;
 }
 
 void* hashring_choose(struct hashring *ring,
 		      const char *key,
-		      size_t len) {
-	if (ring == NULL || ring->size == 0) {
-		stats_log("trying to choose from an empty hashring!");
+		      uint32_t *shard_num) {
+	const size_t ring_size = ring->backends->size;
+	if (ring == NULL || ring_size == 0) {
 		return NULL;
 	}
-	const uint32_t index = stats_hash(key, (uint32_t) len, ring->size);
-	return ring->backends[index];
+	const uint32_t index = stats_hash(key, strlen(key), ring_size);
+	if (shard_num != NULL) {
+		*shard_num = index;
+	}
+	return ring->backends->data[index];
 }
 
 void hashring_dealloc(struct hashring *ring) {
@@ -107,20 +100,19 @@ void hashring_dealloc(struct hashring *ring) {
 	if (ring->backends == NULL) {
 		return;
 	}
-	for (size_t i = 0; i < ring->size; i++) {
+	const size_t ring_size = ring->backends->size;
+	for (size_t i = 0; i < ring_size; i++) {
 		bool need_dealloc = true;
 		for (size_t j = 0; j < i; j++) {
-			if (ring->backends[i] == ring->backends[j]) {
+			if (ring->backends->data[i] == ring->backends->data[j]) {
 				need_dealloc = false;
 				break;
 			}
 		}
 		if (need_dealloc) {
-			ring->dealloc(ring->backends[i]);
+			ring->dealloc(ring->backends->data[i]);
 		}
 	}
-	free(ring->backends);
-	ring->backends = NULL;
-	ring->size = 0;
+	statsrelay_list_destroy(ring->backends);
 	free(ring);
 }

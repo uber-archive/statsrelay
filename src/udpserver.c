@@ -139,7 +139,9 @@ static void udplistener_destroy(udpserver_t *server, udplistener_t *listener) {
 }
 
 
-int udpserver_bind(udpserver_t *server, const char *address_and_port, const char *default_port, int (*cb_recv)(int, void *)) {
+int udpserver_bind(udpserver_t *server,
+		   const char *address_and_port,
+		   int (*cb_recv)(int, void *)) {
 	udplistener_t *listener;
 	struct addrinfo hints;
 	struct addrinfo *addrs, *p;
@@ -152,11 +154,12 @@ int udpserver_bind(udpserver_t *server, const char *address_and_port, const char
 	}
 
 	char *ptr = strrchr(address_and_port, ':');
-	const char *port = ptr == NULL ? default_port : ptr + 1;
-
-	if (ptr != NULL) {
-		address[ptr - address_and_port] = '\0';
+	if (ptr == NULL) {
+		stats_error_log("udpserver: missing port");
+		return 1;
 	}
+	const char *port = ptr + 1;
+	address[ptr - address_and_port] = '\0';
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
