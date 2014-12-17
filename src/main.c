@@ -22,6 +22,7 @@ struct server_collection servers;
 
 static struct option long_options[] = {
 	{"config",		required_argument,	NULL, 'c'},
+	{"check-config",	required_argument,	NULL, 't'},
 	{"verbose",		no_argument,		NULL, 'v'},
 	{"log-level",		required_argument,	NULL, 'l'},
 	{"help",		no_argument,		NULL, 'h'},
@@ -50,6 +51,18 @@ static char* to_lower(const char *input) {
 	return output;
 }
 
+static struct config *load_config(const char *filename) {
+	FILE *file_handle = fopen(filename, "r");
+	if (file_handle == NULL) {
+		stats_error_log("failed to open file %s", servers.config_file);
+		return NULL;
+	}
+	struct config *cfg = parse_config(file_handle);
+	fclose(file_handle);
+	return cfg;
+}
+
+
 static void print_help(const char *argv0) {
 	fprintf(stderr,
 		"Usage: %s [options]                                    \n"
@@ -59,8 +72,11 @@ static void print_help(const char *argv0) {
 		"    --log-level             Set the logging level to DEBUG, INFO, WARN, or ERROR\n"
 		"    (default: INFO)\n"
 		"    --config=filename       Use the given hashring config file\n"
+		"    (default: %s)\n"
+		"    --check-config=filename  Check the config syntax\n"
 		"    (default: %s)\n",
 		argv0,
+		default_config,
 		default_config);
 }
 
@@ -69,11 +85,12 @@ int main(int argc, char **argv) {
 	char *lower;
 	int option_index = 0;
 	char c = 0;
+	bool just_check_config = false;
 	servers.initialized = false;
 
 	stats_set_log_level(STATSRELAY_LOG_INFO);  // set default value
 	while (c != -1) {
-		c = getopt_long(argc, argv, "c:l:vh", long_options, &option_index);
+		c = getopt_long(argc, argv, "t:c:l:vh", long_options, &option_index);
 		switch (c) {
 		case -1:
 			break;
@@ -103,6 +120,10 @@ int main(int argc, char **argv) {
 		case 'c':
 			init_server_collection(&servers, optarg);
 			break;
+		case 't':
+			init_server_collection(&servers, optarg);
+			just_check_config = true;
+			break;
 		default:
 			fprintf(stderr, "%s: Unknown argument %c", argv[0], c);
 			goto err;
@@ -114,12 +135,25 @@ int main(int argc, char **argv) {
 		init_server_collection(&servers, default_config);
 	}
 
+	struct config *cfg = load_config(servers.config_file);
+	if (cfg == NULL) {
+		stats_error_log("failed to parse config");
+		goto err;
+	}
+	if (just_check_config) {
+		destroy_config(cfg);
+		goto success;
+	}
+	connect_server_collection(&servers, cfg);
+	destroy_config(cfg);
+
+
 	FILE *file_handle = fopen(servers.config_file, "r");
 	if (file_handle == NULL) {
 		stats_error_log("failed to open file %s", servers.config_file);
 		goto err;
 	}
-	struct config *cfg = parse_config(file_handle);
+
 	fclose(file_handle);
 
 	if (cfg == NULL) {
@@ -142,6 +176,7 @@ int main(int argc, char **argv) {
 	stats_log("main: Starting event loop");
 	ev_run(loop, 0);
 
+success:
 	destroy_server_collection(&servers);
 	stats_log_end();
 	return 0;

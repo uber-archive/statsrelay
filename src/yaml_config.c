@@ -126,7 +126,7 @@ struct config* parse_config(FILE *input) {
 					} else if (strcmp(strval, "shard_map") == 0) {
 						shard_count = -1;
 						expect_shard_map = true;
-					} else if (strcmp(strval, "validate")) {
+					} else if (strcmp(strval, "validate") == 0) {
 						update_validate = true;
 					}
 				} else {
@@ -193,6 +193,7 @@ struct config* parse_config(FILE *input) {
 	return config;
 
 parse_err:
+	destroy_config(config);
 	yaml_event_delete(&event);
 	yaml_parser_delete(&parser);
 	return NULL;
