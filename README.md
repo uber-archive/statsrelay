@@ -1,5 +1,5 @@
 # statsrelay
-A consistent-hashing relay for statsd metrics
+A consistent-hashing relay for statsd and carbon metrics
 
 [![Build Status](https://travis-ci.org/uber/statsrelay.svg?branch=master)](https://travis-ci.org/uber/statsrelay)
 [![Coverity Status](https://scan.coverity.com/projects/2789/badge.svg)](https://scan.coverity.com/projects/2789)
@@ -184,7 +184,7 @@ will be a bit trickier; see below.
 
 ## A Note On Carbon Scaling
 
-Starsrealy can do relaying for carbon lines just like statsd. The
+Statsrelay can do relaying for carbon lines just like statsd. The
 strategy for scaling carbon using virtual shards is exactly the
 same. One important difference, however, is that when you move a
 carbon shard you'll want to move the associated whisper files as
