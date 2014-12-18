@@ -1,5 +1,5 @@
 # statsrelay
-A consistent-hashing relay for statsd metrics
+A consistent-hashing relay for statsd and carbon metrics
 
 [![Build Status](https://travis-ci.org/uber/statsrelay.svg?branch=master)](https://travis-ci.org/uber/statsrelay)
 [![Coverity Status](https://scan.coverity.com/projects/2789/badge.svg)](https://scan.coverity.com/projects/2789)
@@ -8,20 +8,16 @@ A consistent-hashing relay for statsd metrics
 MIT License
 Copyright (c) 2014 Uber Technologies, Inc.
 
-libketama
-BSD License
-Copyright (c) 2007 Last.fm
-Copyright (c) 2007-2014 Richard Jones <rj@metabrew.com>
-
 # Build
 
 Dependencies:
 - automake
 - pkg-config
 - libev (>= 4.11)
+- libyaml
 
 ```
-apt-get install automake pkg-config libev-dev
+apt-get install automake pkg-config libev-dev libyaml-devel
 
 autoreconf --install
 ./configure
@@ -47,14 +43,15 @@ Usage: statsrelay [options]
 ```
 
 ```
-statsrelay --config=/path/to/statsrelay.conf
+statsrelay --config=/path/to/statsrelay.yaml
 ```
 
 This process will run in the foreground. If you need to daemonize, use
 start-stop-script, daemontools, supervisord, upstart, systemd, or your
 preferred service watchdog.
 
-By default statsrelay binds to all interfaces on port 8125, tcp and udp.
+By default statsrelay binds to 127.0.0.1:8125 for statsd proxying, and
+it binds to 127.0.0.1:2003 for carbon proxying.
 
 For each line that statsrelay receives in the statsd format
 "statname.foo.bar:1|c\n", the key will be hashed to determine which
@@ -94,10 +91,10 @@ global bytes_recv_tcp counter 41
 global total_connections counter 1
 global last_reload timestamp 0
 global malformed_lines counter 0
-backend:127.0.0.2:8127 bytes_queued counter 27
-backend:127.0.0.2:8127 bytes_sent counter 27
-backend:127.0.0.2:8127 relayed_lines counter 3
-backend:127.0.0.2:8127 dropped_lines counter 0
+backend:127.0.0.2:8127:tcp bytes_queued counter 27
+backend:127.0.0.2:8127:tcp bytes_sent counter 27
+backend:127.0.0.2:8127:tcp relayed_lines counter 3
+backend:127.0.0.2:8127:tcp dropped_lines counter 0
 
 ```
 
@@ -110,15 +107,21 @@ also applies to alternative statsd implementations like statsite.
 
 Consider the following simplified example with this config file:
 
-```
-10.0.0.1:9000
-10.0.0.1:9000
-10.0.0.1:9001
-10.0.0.1:9001
-10.0.0.2:9000
-10.0.0.2:9000
-10.0.0.2:9001
-10.0.0.2:9001
+```yaml
+statsd:
+  bind: 127.0.0.1:8125
+  validate: true
+  shard_map:
+    0: 10.0.0.1:9000
+    1: 10.0.0.1:9000
+    2: 10.0.0.1:9001
+    3: 10.0.0.1:9001
+    4: 10.0.0.2:9000
+    5: 10.0.0.2:9000
+    6: 10.0.0.2:9001
+    7: 10.0.0.2:9001
+carbon:
+  ...
 ```
 
 In this file we've defined two actual backend hosts (10.0.0.1 and
@@ -127,7 +130,9 @@ port 9000 and one on port 9001 (this is a good way to scale statsd,
 since statsd and alternative implementations like statsite are
 typically single threaded). In a real setup, you'd likely be running
 more statsd instances on each server, and you'd likely have more
-repeated lines to assign more virtual shards to each statsd instance.
+repeated lines to assign more virtual shards to each statsd
+instance. At Uber we use 4096 virtual shards, with a much smaller
+number of actual backend instances.
 
 Internally statsrelay assigns a zero-indexed virtual shard to each
 line in the file; so 10.0.0.1:9000 has virtual shards 0 and 1,
@@ -137,15 +142,21 @@ Let's say that the backend server 10.0.0.1 has become overloaded, and
 we want to add a new server to the configuration. We might do that
 like this:
 
-```
-10.0.0.1:9000
-10.0.0.3:9000
-10.0.0.1:9001
-10.0.0.3:9001
-10.0.0.2:9000
-10.0.0.2:9000
-10.0.0.2:9001
-10.0.0.2:9001
+```yaml
+statsd:
+  bind: 127.0.0.1:8125
+  validate: true
+  shard_map:
+    0: 10.0.0.1:9000
+    1: 10.0.0.3:9000
+    2: 10.0.0.1:9001
+    3: 10.0.0.3:9001
+    4: 10.0.0.2:9000
+    5: 10.0.0.2:9000
+    6: 10.0.0.2:9001
+    7: 10.0.0.2:9001
+carbon:
+  ...
 ```
 
 In the new configuration we've moved one of the two virtual shards for
@@ -173,14 +184,14 @@ will be a bit trickier; see below.
 
 ## A Note On Carbon Scaling
 
-When you run statsrelay with the `--protocol=carbon` option it can do
-relaying for carbon lines just like statsd. The strategy for scaling
-carbon using virtual shards is exactly the same. One important
-difference, however, is that when you move a carbon shard you'll want
-to move the associated whisper files as well. You can do this using
-the `stathasher` binary that is built by statsrelay. By pointing that
-command at your statsrelay config, you can send it key names on stdin
-and have the virtual shard ids printed to stdout.
+Statsrelay can do relaying for carbon lines just like statsd. The
+strategy for scaling carbon using virtual shards is exactly the
+same. One important difference, however, is that when you move a
+carbon shard you'll want to move the associated whisper files as
+well. You can do this using the `stathasher` binary that is built by
+statsrelay. By pointing that command at your statsrelay config, you
+can send it key names on stdin and have the virtual shard ids printed
+to stdout.
 
 Using this technique you can script the reassignment of whisper
 files. The general idea is to walk the filesystem and gather all of

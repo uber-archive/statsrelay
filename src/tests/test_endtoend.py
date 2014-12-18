@@ -1,24 +1,47 @@
 #!/usr/bin/env python
 
-import os
+import contextlib
 import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import time
-import types
 import unittest
 
 from collections import defaultdict
 
 
+SOCKET_TIMEOUT = 1
+
+# While debugging, set this to False
+QUIET = True
+if QUIET:
+    DEVNULL = open('/dev/null', 'wb')
+    POPEN_KW = {'stdout': DEVNULL, 'stderr': DEVNULL}
+else:
+    POPEN_KW = {}
+
+
 class TestCase(unittest.TestCase):
 
-    def launch_process(self, *extra_args):
-        args = ['./statsrelay', '--verbose'] + list(extra_args)
-        proc = subprocess.Popen(args)
-        time.sleep(0.1)
-        return proc
+    def setUp(self):
+        super(TestCase, self).setUp()
+        self.proc = None
+
+    def tearDown(self):
+        super(TestCase, self).tearDown()
+        if self.proc:
+            try:
+                self.proc.kill()
+            except OSError:
+                pass
+
+    def launch_process(self, config_path):
+        args = ['./statsrelay', '--verbose', '--log-level=DEBUG']
+        args.append('--config=' + config_path)
+        self.proc = subprocess.Popen(args, **POPEN_KW)
+        time.sleep(0.5)
 
     def reload_process(self, proc):
         proc.send_signal(signal.SIGHUP)
@@ -28,61 +51,123 @@ class TestCase(unittest.TestCase):
         bytes_read = fd.recv(size)
         self.assertEqual(bytes_read, expected)
 
+    def recv_status(self, fd):
+        return fd.recv(65536)
+
+    @contextlib.contextmanager
+    def generate_config(self, mode):
+        if mode.lower() == 'tcp':
+            sock_type = socket.SOCK_STREAM
+            config_path = 'tests/statsrelay.yaml'
+        elif mode.lower() == 'udp':
+            sock_type = socket.SOCK_DGRAM
+            config_path = 'tests/statsrelay_udp.yaml'
+        else:
+            raise ValueError()
+
+        try:
+            self.bind_carbon_port = self.choose_port(sock_type)
+            self.bind_statsd_port = self.choose_port(sock_type)
+
+            self.carbon_listener = socket.socket(socket.AF_INET, sock_type)
+            self.carbon_listener.bind(('127.0.0.1', 0))
+            self.carbon_listener.settimeout(SOCKET_TIMEOUT)
+            self.carbon_port = self.carbon_listener.getsockname()[1]
+
+            self.statsd_listener = socket.socket(socket.AF_INET, sock_type)
+            self.statsd_listener.bind(('127.0.0.1', 0))
+            self.statsd_listener.settimeout(SOCKET_TIMEOUT)
+            self.statsd_port = self.statsd_listener.getsockname()[1]
+
+            if mode.lower() == 'tcp':
+                self.carbon_listener.listen(1)
+                self.statsd_listener.listen(1)
+
+            new_config = tempfile.NamedTemporaryFile()
+            with open(config_path) as config_file:
+                data = config_file.read()
+            for var, replacement in [
+                    ('BIND_CARBON_PORT', self.bind_carbon_port),
+                    ('BIND_STATSD_PORT', self.bind_statsd_port),
+                    ('SEND_CARBON_PORT', self.carbon_port),
+                    ('SEND_STATSD_PORT', self.statsd_port)]:
+                data = data.replace(var, str(replacement))
+            new_config.write(data)
+            new_config.flush()
+            yield new_config.name
+        finally:
+            self.statsd_listener.close()
+            self.carbon_listener.close()
+
+    def connect(self, sock_type, port):
+        if sock_type.lower() == 'tcp':
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        else:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.connect(('127.0.0.1', port))
+        sock.settimeout(SOCKET_TIMEOUT)
+        return sock
+
+    def choose_port(self, sock_type):
+        s = socket.socket(socket.AF_INET, sock_type)
+        s.bind(('127.0.0.1', 0))
+        port = s.getsockname()[1]
+        s.close()
+        return port
+
 
 class ConfigTestCase(TestCase):
-
-    def test_bind(self):
-        """Test different parsings for the --bind option."""
-        proc = None
-        for host_port_str in ('*:8125',
-                              '127.0.0.1:8125',
-                              '0.0.0.0:8125'):
-            try:
-                proc = self.launch_process('--config=tests/hashring1.txt',
-                                           '--bind=' + host_port_str)
-                s = socket.socket()
-                s.connect(('127.0.0.1', 8125))
-            finally:
-                if proc is not None:
-                    proc.terminate()
+    """Test config option parsing."""
 
     def test_invalid_config_file(self):
         """Test that directories are correctly ignored as config files."""
-        proc = self.launch_process('--config=.')
+        self.launch_process('.')
+        self.proc.wait()
+        self.assertEqual(self.proc.returncode, 1)
+
+        self.launch_process('/etc/passwd')
+        self.proc.wait()
+        self.assertEqual(self.proc.returncode, 1)
+
+    def test_check_invalid_config_file(self):
+        proc = subprocess.Popen(
+            ['./statsrelay', '-t', '/etc/passwd'], **POPEN_KW)
         proc.wait()
         self.assertEqual(proc.returncode, 1)
+
+    def test_check_valid_tcp_file(self):
+        with self.generate_config('tcp') as config_path:
+            proc = subprocess.Popen(['./statsrelay', '-t', config_path])
+            proc.wait()
+            self.assertEqual(proc.returncode, 0)
+
+    def test_check_valid_udp_file(self):
+        with self.generate_config('udp') as config_path:
+            proc = subprocess.Popen(['./statsrelay', '-t', config_path])
+            proc.wait()
+            self.assertEqual(proc.returncode, 0)
 
 
 class StatsdTestCase(TestCase):
 
     def test_tcp_listener(self):
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind(('127.0.0.1', 8126))
-        listener.listen(1)
-
-        proc = self.launch_process('--config=tests/statsrelay_tcp.conf',
-                                   '--bind=127.0.0.1:8125')
-
-        try:
-            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sender.connect(('127.0.0.1', 8125))
+        with self.generate_config('tcp') as config_path:
+            self.launch_process(config_path)
+            fd, addr = self.statsd_listener.accept()
+            sender = self.connect('udp', self.bind_statsd_port)
             sender.sendall('test:1|c\n')
-            fd, addr = listener.accept()
             self.check_recv(fd, 'test:1|c\n')
             sender.sendall('test:1|c\n')
             self.check_recv(fd, 'test:1|c\n')
             fd.close()
-            print 'Wait for backoff timeout...'
             time.sleep(6.0)
             sender.sendall('test:xxx\n')
             sender.sendall('test:1|c\n')
-            fd, addr = listener.accept()
+            fd, addr = self.statsd_listener.accept()
             self.check_recv(fd, 'test:1|c\n')
             sender.close()
 
-            sender = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sender.connect(('127.0.0.1', 8125))
+            sender = self.connect('tcp', self.bind_statsd_port)
             sender.sendall('tcptest:1|c\n')
             self.check_recv(fd, 'tcptest:1|c\n')
 
@@ -99,30 +184,19 @@ class StatsdTestCase(TestCase):
                 backend, key, valuetype, value = line.split(' ', 3)
                 backend = backend.split(':', 1)[1]
                 backends[backend][key] = int(value)
-            self.assertEqual(backends['127.0.0.1:8126:tcp']['relayed_lines'], 4)
-            self.assertEqual(backends['127.0.0.1:8126:tcp']['dropped_lines'], 0)
-            self.assertEqual(backends['127.0.0.1:8126:tcp']['bytes_queued'],
-                             backends['127.0.0.1:8126:tcp']['bytes_sent'])
 
-            fd.close()
-        finally:
-            proc.terminate()
-            listener.close()
+            key = '127.0.0.1:%d:tcp' % (self.statsd_listener.getsockname()[1],)
+            self.assertEqual(backends[key]['relayed_lines'], 4)
+            self.assertEqual(backends[key]['dropped_lines'], 0)
+            self.assertEqual(backends[key]['bytes_queued'],
+                             backends[key]['bytes_sent'])
 
     def test_udp_listener(self):
-        listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind(('127.0.0.1', 8126))
-
-        proc = self.launch_process('--config=tests/statsrelay_udp.conf',
-                                   '--bind=127.0.0.1:8125')
-        self.reload_process(proc)
-
-        try:
-            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sender.connect(('127.0.0.1', 8125))
+        with self.generate_config('udp') as config_path:
+            self.launch_process(config_path)
+            sender = self.connect('udp', self.bind_statsd_port)
             sender.sendall('test:1|c\n')
-            fd = listener
+            fd = self.statsd_listener
             self.check_recv(fd, 'test:1|c\n')
             sender.sendall('test:1|c\n')
             self.check_recv(fd, 'test:1|c\n')
@@ -131,8 +205,7 @@ class StatsdTestCase(TestCase):
             self.check_recv(fd, 'test:1|c\n')
             sender.close()
 
-            sender = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sender.connect(('127.0.0.1', 8125))
+            sender = self.connect('tcp', self.bind_statsd_port)
             sender.sendall('tcptest:1|c\n')
             self.check_recv(fd, 'tcptest:1|c\n')
 
@@ -149,75 +222,65 @@ class StatsdTestCase(TestCase):
                 backend, key, valuetype, value = line.split(' ', 3)
                 backend = backend.split(':', 1)[1]
                 backends[backend][key] = int(value)
-            self.assertEqual(backends['127.0.0.1:8126:udp']['relayed_lines'], 4)
-            self.assertEqual(backends['127.0.0.1:8126:udp']['dropped_lines'], 0)
-            self.assertEqual(backends['127.0.0.1:8126:udp']['bytes_queued'],
-                             backends['127.0.0.1:8126:udp']['bytes_sent'])
-
-            fd.close()
-        finally:
-            proc.terminate()
-            listener.close()
+            key = '127.0.0.1:%d:udp' % (self.statsd_listener.getsockname()[1],)
+            self.assertEqual(backends[key]['relayed_lines'], 4)
+            self.assertEqual(backends[key]['dropped_lines'], 0)
+            self.assertEqual(backends[key]['bytes_queued'],
+                             backends[key]['bytes_sent'])
 
 
 class CarbonTestCase(TestCase):
 
-    def test_carbon(self):
-        listener = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind(('127.0.0.1', 8126))
+    def run_checks(self, fd, proto):
+        sender = self.connect('udp', self.bind_carbon_port)
+        sender.sendall('1 2 3\n')
+        self.check_recv(fd, '1 2 3\n')
+        sender.sendall('4 5 6\n')
+        self.check_recv(fd, '4 5 6\n')
+        sender.sendall('\n')           # invalid
+        sender.sendall('1\n')          # invalid
+        sender.sendall('1 2\n')        # invalid
+        sender.sendall('a b c\n')
+        self.check_recv(fd, 'a b c\n')
+        sender.sendall('1 2 3 4\n')    # invalid
+        sender.sendall('1 2 3 4 5\n')  # invalid
+        sender.sendall('d e f\n')
+        self.check_recv(fd, 'd e f\n')
+        sender.sendall('1 2 3\n')
+        self.check_recv(fd, '1 2 3\n')
 
-        proc = self.launch_process('--protocol=carbon',
-                                   '--config=tests/statsrelay_udp.conf',
-                                   '--bind=127.0.0.1:2003')
+        sender = self.connect('tcp', self.bind_carbon_port)
+        sender.sendall('status\n')
+        status = self.recv_status(sender)
+        sender.close()
 
-        try:
-            fd = listener
-            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sender.connect(('127.0.0.1', 2003))
-            sender.sendall('1 2 3\n')
-            self.check_recv(fd, '1 2 3\n')
-            sender.sendall('4 5 6\n')
-            self.check_recv(fd, '4 5 6\n')
-            sender.sendall('\n')           # invalid
-            sender.sendall('1\n')          # invalid
-            sender.sendall('1 2\n')        # invalid
-            sender.sendall('a b c\n')
-            self.check_recv(fd, 'a b c\n')
-            sender.sendall('1 2 3 4\n')    # invalid
-            sender.sendall('1 2 3 4 5\n')  # invalid
-            sender.sendall('d e f\n')
-            self.check_recv(fd, 'd e f\n')
-            sender.close()
+        backends = defaultdict(dict)
+        for line in status.split('\n'):
+            if not line:
+                break
+            if not line.startswith('backend:'):
+                continue
+            backend, key, valuetype, value = line.split(' ', 3)
+            backend = backend.split(':', 1)[1]
+            backends[backend][key] = int(value)
 
-            sender = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sender.connect(('127.0.0.1', 2003))
-            sender.sendall('1 2 3\n')
-            self.check_recv(fd, '1 2 3\n')
+        key = '127.0.0.1:%d:%s' % (
+            self.carbon_listener.getsockname()[1], proto)
+        self.assertEqual(backends[key]['relayed_lines'], 5)
+        self.assertEqual(backends[key]['dropped_lines'], 0)
+        self.assertEqual(backends[key]['bytes_queued'],
+                         backends[key]['bytes_sent'])
 
-            sender.sendall('status\n')
-            status = sender.recv(65536)
-            sender.close()
+    def test_carbon_tcp(self):
+        with self.generate_config('tcp') as config:
+            self.launch_process(config)
+            fd, addr = self.carbon_listener.accept()
+            self.run_checks(fd, 'tcp')
 
-            backends = defaultdict(dict)
-            for line in status.split('\n'):
-                if not line:
-                    break
-                if not line.startswith('backend:'):
-                    continue
-                backend, key, valuetype, value = line.split(' ', 3)
-                backend = backend.split(':', 1)[1]
-                backends[backend][key] = int(value)
-            self.assertEqual(backends['127.0.0.1:8126:udp']['relayed_lines'], 5)
-            self.assertEqual(backends['127.0.0.1:8126:udp']['dropped_lines'], 0)
-            self.assertEqual(backends['127.0.0.1:8126:udp']['bytes_queued'],
-                             backends['127.0.0.1:8126:udp']['bytes_sent'])
-
-            fd.close()
-        finally:
-            proc.terminate()
-            listener.close()
-        return 0
+    def test_carbon_udp(self):
+        with self.generate_config('udp') as config:
+            self.launch_process(config)
+            self.run_checks(self.carbon_listener, 'udp')
 
 
 def main():
