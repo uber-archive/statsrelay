@@ -51,6 +51,10 @@ hashring_t hashring_load_from_config(struct proto_config *pc,
 }
 
 bool hashring_add(hashring_t ring, const char *line) {
+	if (line == NULL) {
+		stats_error_log("cowardly refusing to alloc NULL pointer");
+		goto add_err;
+	}
 	// allocate an object
 	void *obj = ring->alloc(line, ring->alloc_data);
 	if (obj == NULL) {

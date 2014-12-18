@@ -147,22 +147,6 @@ int main(int argc, char **argv) {
 	connect_server_collection(&servers, cfg);
 	destroy_config(cfg);
 
-
-	FILE *file_handle = fopen(servers.config_file, "r");
-	if (file_handle == NULL) {
-		stats_error_log("failed to open file %s", servers.config_file);
-		goto err;
-	}
-
-	fclose(file_handle);
-
-	if (cfg == NULL) {
-		stats_error_log("failed to parse config");
-		goto err;
-	}
-	connect_server_collection(&servers, cfg);
-	destroy_config(cfg);
-
 	struct ev_loop *loop = ev_default_loop(0);
 	ev_signal_init(&sigint_watcher, graceful_shutdown, SIGINT);
 	ev_signal_start(loop, &sigint_watcher);
