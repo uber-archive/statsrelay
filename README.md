@@ -107,7 +107,7 @@ also applies to alternative statsd implementations like statsite.
 
 Consider the following simplified example with this config file:
 
-```
+```yaml
 statsd:
   bind: 127.0.0.1:8125
   validate: true
