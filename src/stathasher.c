@@ -64,6 +64,7 @@ int main(int argc, char **argv) {
 			printf(" statsd=%s statsd_shard=%d", choice, shard);
 		}
 		putchar('\n');
+		fflush(stdout);
 	}
 	hashring_dealloc(carbon_ring);
 	hashring_dealloc(statsd_ring);
