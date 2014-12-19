@@ -28,8 +28,6 @@ static struct option long_options[] = {
 	{"help",		no_argument,		NULL, 'h'},
 };
 
-static const char default_config[] = "/etc/statsrelay.yaml";
-
 static void graceful_shutdown(struct ev_loop *loop, ev_signal *w, int revents) {
 	stats_log("Received signal, shutting down.");
 	destroy_server_collection(&servers);
@@ -83,14 +81,13 @@ static void print_help(const char *argv0) {
 int main(int argc, char **argv) {
 	ev_signal sigint_watcher, sigterm_watcher, sighup_watcher;
 	char *lower;
-	int option_index = 0;
 	char c = 0;
 	bool just_check_config = false;
 	servers.initialized = false;
 
 	stats_set_log_level(STATSRELAY_LOG_INFO);  // set default value
 	while (c != -1) {
-		c = getopt_long(argc, argv, "t:c:l:vh", long_options, &option_index);
+		c = getopt_long(argc, argv, "t:c:l:vh", long_options, NULL);
 		switch (c) {
 		case -1:
 			break;
