@@ -20,6 +20,9 @@ struct config {
 	struct proto_config carbon_config;
 };
 
+
+static const char default_config[] = "/etc/statsrelay.yaml";
+
 struct config* parse_config(FILE *input);
 
 // release the memory associated with a config
