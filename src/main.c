@@ -64,17 +64,16 @@ static struct config *load_config(const char *filename) {
 
 
 static void print_help(const char *argv0) {
-	fprintf(stderr,
-		"Usage: %s [options]                                    \n"
-		"    --help                  Display this message\n"
-		"    --verbose               Write log messages to stderr in addition to syslog\n"
-		"    syslog\n"
-		"    --log-level             Set the logging level to DEBUG, INFO, WARN, or ERROR\n"
-		"    (default: INFO)\n"
-		"    --config=filename       Use the given hashring config file\n"
-		"    (default: %s)\n"
-		"    --check-config=filename  Check the config syntax\n"
-		"    (default: %s)\n",
+	printf("Usage: %s [options]\n"
+		"  -h, --help                   Display this message\n"
+		"  -v, --verbose                Write log messages to stderr in addition to syslog\n"
+		"                               syslog\n"
+		"  -l, --log-level              Set the logging level to DEBUG, INFO, WARN, or ERROR\n"
+		"                               (default: INFO)\n"
+		"  -c, --config=filename        Use the given hashring config file\n"
+		"                               (default: %s)\n"
+		"  -t, --check-config=filename  Check the config syntax\n"
+		"                               (default: %s)\n",
 		argv0,
 		default_config,
 		default_config);
