@@ -31,15 +31,15 @@ make install
 
 ```
 Usage: statsrelay [options]
-    --help                  Display this message
-    --verbose               Write log messages to stderr in addition to
-			    syslog
-    --bind=address[:port]   Bind to the given address and port
-			    (default: *:8125)
-    --config=filename       Use the given config file
-			    (default: /etc/statsrelay.conf)
-    --max-send-queue=BYTES  Limit each backend connection's send queue to
-			    the given size. (default: 134217728)
+  -h, --help                   Display this message
+  -v, --verbose                Write log messages to stderr in addition to syslog
+                               syslog
+  -l, --log-level              Set the logging level to DEBUG, INFO, WARN, or ERROR
+                               (default: INFO)
+  -c, --config=filename        Use the given hashring config file
+                               (default: /etc/statsrelay.yaml)
+  -t, --check-config=filename  Check the config syntax
+                               (default: /etc/statsrelay.yaml)
 ```
 
 ```
