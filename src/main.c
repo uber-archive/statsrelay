@@ -140,8 +140,11 @@ int main(int argc, char **argv) {
 		destroy_config(cfg);
 		goto success;
 	}
-	connect_server_collection(&servers, cfg);
+	bool worked = connect_server_collection(&servers, cfg);
 	destroy_config(cfg);
+	if (!worked) {
+		goto err;
+	}
 
 	struct ev_loop *loop = ev_default_loop(0);
 	ev_signal_init(&sigint_watcher, graceful_shutdown, SIGINT);
