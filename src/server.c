@@ -15,24 +15,24 @@ static void init_server(struct server *server) {
 static bool connect_server(struct server *server,
 			   struct proto_config *config,
 			   protocol_parser_t parser,
-			   validate_line_validator_t validator) {
-	server->enabled = true;
+			   validate_line_validator_t validator,
+			   const char *name) {
+	if (config->ring->size == 0) {
+		stats_log("%s has no backends, skipping", name);
+		return false;
+	}
 
 	struct ev_loop *loop = ev_default_loop(0);
 
 	server->server = stats_server_create(
 		loop, config, parser, validator);
 
+	server->enabled = true;
+
 	if (server->server == NULL) {
 		stats_error_log("main: Unable to create stats_server");
 		return false;
 	}
-
-	if (stats_num_backends(server->server) == 0) {
-		stats_error_log("server has no backends, something seems wrong");
-		return false;
-	}
-
 	server->ts = tcpserver_create(loop, server->server);
 	if (server->ts == NULL) {
 		stats_error_log("failed to create tcpserver");
@@ -79,16 +79,23 @@ void init_server_collection(struct server_collection *server_collection,
 	init_server(&server_collection->statsd_server);
 }
 
-void connect_server_collection(struct server_collection *server_collection,
+bool connect_server_collection(struct server_collection *server_collection,
 			       struct config *config) {
-	connect_server(&server_collection->carbon_server,
-		       &config->carbon_config,
-		       protocol_parser_carbon,
-		       validate_carbon);
-	connect_server(&server_collection->statsd_server,
-		       &config->statsd_config,
-		       protocol_parser_statsd,
-		       validate_statsd);
+	bool enabled_any = false;
+	enabled_any |= connect_server(&server_collection->carbon_server,
+				      &config->carbon_config,
+				      protocol_parser_carbon,
+				      validate_carbon,
+				      "carbon");
+	enabled_any |= connect_server(&server_collection->statsd_server,
+				      &config->statsd_config,
+				      protocol_parser_statsd,
+				      validate_statsd,
+				      "statsd");
+	if (!enabled_any) {
+		stats_error_log("failed to enable any backends");
+	}
+	return enabled_any;
 }
 
 void destroy_server_collection(struct server_collection *server_collection) {

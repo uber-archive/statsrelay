@@ -147,6 +147,11 @@ class ConfigTestCase(TestCase):
             proc.wait()
             self.assertEqual(proc.returncode, 0)
 
+    def test_check_empty_file(self):
+        proc = subprocess.Popen(['./statsrelay', '-c', 'tests/empty.yaml'])
+        proc.wait()
+        self.assertEqual(proc.returncode, 1)
+
 
 class StatsdTestCase(TestCase):
 
