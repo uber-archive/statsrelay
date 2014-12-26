@@ -35,15 +35,13 @@ typedef struct {
 struct stats_server_t {
 	struct ev_loop *loop;
 
-	uint64_t max_send_queue;
-	int validate_lines;
-
 	uint64_t bytes_recv_udp;
 	uint64_t bytes_recv_tcp;
 	uint64_t total_connections;
 	uint64_t malformed_lines;
 	time_t last_reload;
 
+	struct proto_config *config;
 	size_t num_backends;
 	stats_backend_t **backend_list;
 
@@ -167,7 +165,7 @@ static void* make_backend(const char *host_and_port, void *data) {
 	if (tcpclient_init(&backend->client,
 			   server->loop,
 			   backend,
-			   server->max_send_queue)) {
+			   server->config)) {
 		stats_log("stats: failed to tcpclient_init");
 		goto make_err;
 	}
@@ -224,7 +222,7 @@ stats_server_t *stats_server_create(struct ev_loop *loop,
 	server->loop = loop;
 	server->num_backends = 0;
 	server->backend_list = NULL;
-	server->max_send_queue = config->max_send_queue;
+	server->config = config;
 	server->ring = hashring_load_from_config(
 		config, server, make_backend, kill_backend);
 	if (server->ring == NULL) {
@@ -238,7 +236,6 @@ stats_server_t *stats_server_create(struct ev_loop *loop,
 	server->total_connections = 0;
 	server->last_reload = 0;
 
-	server->validate_lines = config->enable_validation;
 	server->parser = parser;
 	server->validator = validator;
 
@@ -294,7 +291,7 @@ void *stats_connection(int sd, void *ctx) {
 }
 
 static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
-	if (ss->validate_lines && ss->validator != NULL) {
+	if (ss->config->enable_validation && ss->validator != NULL) {
 		if (ss->validator(line, len) != 0) {
 			return 1;
 		}

@@ -27,6 +27,7 @@ class TestCase(unittest.TestCase):
 
     def setUp(self):
         super(TestCase, self).setUp()
+        self.tcp_cork = 'false'
         self.proc = None
 
     def tearDown(self):
@@ -90,7 +91,8 @@ class TestCase(unittest.TestCase):
                     ('BIND_CARBON_PORT', self.bind_carbon_port),
                     ('BIND_STATSD_PORT', self.bind_statsd_port),
                     ('SEND_CARBON_PORT', self.carbon_port),
-                    ('SEND_STATSD_PORT', self.statsd_port)]:
+                    ('SEND_STATSD_PORT', self.statsd_port),
+                    ('TCP_CORK', self.tcp_cork)]:
                 data = data.replace(var, str(replacement))
             new_config.write(data)
             new_config.flush()
@@ -232,6 +234,38 @@ class StatsdTestCase(TestCase):
             self.assertEqual(backends[key]['dropped_lines'], 0)
             self.assertEqual(backends[key]['bytes_queued'],
                              backends[key]['bytes_sent'])
+
+    def test_tcp_cork(self):
+        cork_time = 0.200  # cork time is 200ms on linux
+        self.tcp_cork = 'true'
+        msg = 'test:1|c\n'
+        with self.generate_config('tcp') as config_path:
+            self.launch_process(config_path)
+            fd, addr = self.statsd_listener.accept()
+            sender = self.connect('udp', self.bind_statsd_port)
+            t0 = time.time()
+            sender.sendall(msg)
+            self.check_recv(fd, msg)
+            elapsed = time.time() - t0
+
+            # data should be corked, so we should need to wait 200ms
+            self.assertAlmostEqual(elapsed, cork_time, places=2)
+
+            # try sending w/o corking... this assumes the mtu of the
+            # loopback interface is 64k. need to send multiple
+            # messages to avoid getting EMSGSIZE
+            needed_messages = ((1 << 16) / len(msg)) / 2
+            buf = msg * needed_messages
+            t0 = time.time()
+            sender.sendall(buf)
+            sender.sendall(buf)
+            sender.sendall(msg)
+            self.assertEqual(len(fd.recv(1024)), 1024)
+
+            # we can tell data wasn't corked because we get a response
+            # fast enough
+            elapsed = time.time() - t0
+            self.assertLess(elapsed, cork_time / 2)
 
 
 class CarbonTestCase(TestCase):
