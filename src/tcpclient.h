@@ -13,6 +13,8 @@
 
 #include <ev.h>
 
+#include "yaml_config.h"
+
 #define TCPCLIENT_CONNECT_TIMEOUT 2.0
 #define TCPCLIENT_RETRY_TIMEOUT 5
 #define TCPCLIENT_RECV_BUFFER 65536
@@ -62,19 +64,20 @@ typedef struct tcpclient_t {
 	char name[TCPCLIENT_NAME_LEN];
 	struct addrinfo *addr;
 	buffer_t send_queue;
-	uint64_t max_send_queue;
 	enum tcpclient_state state;
 	time_t last_error;
 	int retry_count;
 	int failing;
 	int sd;
 	int socktype;
+
+	struct proto_config *config;
 } tcpclient_t;
 
 int tcpclient_init(tcpclient_t *client,
 		   struct ev_loop *loop,
 		   void *callback_connect,
-		   uint64_t max_send_queue);
+		   struct proto_config *config);
 
 void tcpclient_set_sent_callback(tcpclient_t *client,
 				 tcpclient_callback callback);

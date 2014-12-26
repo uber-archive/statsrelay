@@ -13,10 +13,24 @@ static bool convert_number(const char *str, long *num) {
 	return endptr != str;
 }
 
+static bool set_boolean(const char *strval, bool *bool_val) {
+	if (strcmp(strval, "true") == 0) {
+		*bool_val = true;
+	} else if (strcmp(strval, "false") == 0) {
+		*bool_val = false;
+	} else {
+		stats_error_log("unexpected value \"%s\" for boolean field, "
+				"must be true/false", strval);
+		return false;
+	}
+	return true;
+}
+
 static void init_proto_config(struct proto_config *protoc) {
 	protoc->initialized = false;
 	protoc->bind = NULL;
 	protoc->enable_validation = true;
+	protoc->enable_tcp_cork = false;
 	protoc->max_send_queue = 134217728;
 	protoc->ring = statsrelay_list_new();
 }
@@ -59,6 +73,7 @@ struct config* parse_config(FILE *input) {
 	bool update_bind = false;
 	bool update_send_queue = false;
 	bool update_validate = false;
+	bool update_tcp_cork = false;
 	bool expect_shard_map = false;
 	while (keep_going) {
 		if (!yaml_parser_parse(&parser, &event)) {
@@ -128,6 +143,8 @@ struct config* parse_config(FILE *input) {
 						expect_shard_map = true;
 					} else if (strcmp(strval, "validate") == 0) {
 						update_validate = true;
+					} else if (strcmp(strval, "tcp_cork") == 0) {
+						update_tcp_cork = true;
 					}
 				} else {
 					if (update_bind) {
@@ -141,15 +158,15 @@ struct config* parse_config(FILE *input) {
 						protoc->max_send_queue = numval;
 						update_send_queue = false;
 					} else if (update_validate) {
-						if (strcmp(strval, "true") == 0) {
-							protoc->enable_validation = true;
-						} else if (strcmp(strval, "false") == 0) {
-							protoc->enable_validation = false;
-						} else {
-							stats_error_log("unexpected value \"%s\" for validate, must be true/false", strval);
+						if (!set_boolean(strval, &protoc->enable_validation)) {
 							goto parse_err;
 						}
 						update_validate = false;
+					} else if (update_tcp_cork) {
+						if (!set_boolean(strval, &protoc->enable_tcp_cork)) {
+							goto parse_err;
+						}
+						update_tcp_cork = false;
 					}
 				}
 				break;

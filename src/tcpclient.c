@@ -10,6 +10,8 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -54,14 +56,14 @@ static void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *wat
 int tcpclient_init(tcpclient_t *client,
 		   struct ev_loop *loop,
 		   void *callback_context,
-		   uint64_t max_send_queue) {
+		   struct proto_config *config) {
 	client->state = STATE_INIT;
 	client->loop = loop;
 	client->sd = -1;
 	client->addr = NULL;
 	client->last_error = 0;
 	client->failing = 0;
-	client->max_send_queue = max_send_queue;
+	client->config = config;
 	client->socktype = SOCK_DGRAM;
 	strncpy(client->name, "UNRESOLVED", TCPCLIENT_NAME_LEN);
 
@@ -265,6 +267,17 @@ int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, c
 			client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 			return 4;
 		}
+#ifdef TCP_CORK
+		if (client->config->enable_tcp_cork &&
+		    addr->ai_family == AF_INET &&
+		    addr->ai_socktype == SOCK_STREAM &&
+		    addr->ai_protocol == IPPROTO_TCP) {
+			int state = 1;
+			if (setsockopt(sd, IPPROTO_TCP, TCP_CORK, &state, sizeof(state))) {
+				stats_error_log("failed to set TCP_CORK");
+			}
+		}
+#endif
 		client->sd = sd;
 
 		if (fcntl(sd, F_SETFL, (fcntl(sd, F_GETFL) | O_NONBLOCK)) != 0) {
@@ -315,7 +328,7 @@ int tcpclient_sendall(tcpclient_t *client, const char *buf, size_t len) {
 		tcpclient_connect(client, NULL, NULL, NULL);
 	}
 
-	if (buffer_datacount(&client->send_queue) > client->max_send_queue) {
+	if (buffer_datacount(&client->send_queue) > client->config->max_send_queue) {
 		if (client->failing == 0) {
 			stats_log("tcpclient[%s]: Send queue is full, dropping data", client->name);
 			client->failing = 1;
