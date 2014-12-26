@@ -260,7 +260,7 @@ class StatsdTestCase(TestCase):
             sender.sendall(buf)
             sender.sendall(buf)
             sender.sendall(msg)
-            bytes_read = fd.recv(1024)
+            self.assertEqual(len(fd.recv(1024)), 1024)
 
             # we can tell data wasn't corked because we get a response
             # fast enough
