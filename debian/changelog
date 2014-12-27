@@ -1,3 +1,9 @@
+statsrelay (1.5.2-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Jeremy Grosser <jeremy@synack.me>  Fri, 26 Dec 2014 16:05:07 -0800
+
 statsrelay (1.5.1-1) unstable; urgency=low
 
   * New upstream release
