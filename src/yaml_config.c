@@ -3,6 +3,7 @@
 #include "log.h"
 
 #include <stdbool.h>
+#include <string.h>
 #include <yaml.h>
 
 // convert a string to a number; stores the result in num, and returns
