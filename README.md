@@ -40,6 +40,7 @@ Usage: statsrelay [options]
                                (default: /etc/statsrelay.yaml)
   -t, --check-config=filename  Check the config syntax
                                (default: /etc/statsrelay.yaml)
+  --version                    Print the version
 ```
 
 ```
