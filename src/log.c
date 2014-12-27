@@ -7,16 +7,22 @@
 
 #define STATSRELAY_LOG_BUF_SIZE 256
 
-static int g_verbose = 1;
-
+static bool g_verbose = 0;
+static enum statsrelay_log_level g_level;
 static int fmt_buf_size = 0;
 static char *fmt_buf = NULL;
 
-void stats_log_verbose(int verbose) {
+void stats_log_verbose(bool verbose) {
 	g_verbose = verbose;
 }
 
-void stats_vlog(const char *format, va_list ap) {
+void stats_set_log_level(enum statsrelay_log_level level) {
+	g_level = level;
+}
+
+void stats_vlog(const char *prefix,
+		const char *format,
+		va_list ap) {
 	int fmt_len;
 	char *np;
 	size_t total_written, bw;
@@ -48,6 +54,9 @@ void stats_vlog(const char *format, va_list ap) {
 	}
 
 	if (g_verbose == 1) {
+		if (prefix != NULL) {
+			fprintf(stderr, prefix);
+		}
 		total_written = 0;
 		while (total_written < fmt_len) {
 			// try to write to stderr, but if there are any
@@ -80,19 +89,33 @@ alloc_failure:
 	return;
 }
 
-void stats_log(const char *format, ...) {
-	va_list args;
-	va_start(args, format);
-	stats_vlog(format, args);
-	va_end(args);
-}
-
 void stats_debug_log(const char *format, ...) {
-	if (g_verbose) {
+	if (g_level <= STATSRELAY_LOG_DEBUG) {
 		va_list args;
 		va_start(args, format);
-		stats_vlog(format, args);
+		stats_vlog("DEBUG: ", format, args);
 		va_end(args);
+	}
+}
+
+void stats_log(const char *format, ...) {
+	if (g_level <= STATSRELAY_LOG_INFO) {
+		va_list args;
+		va_start(args, format);
+		stats_vlog(NULL, format, args);
+		va_end(args);
+	}
+}
+
+void stats_error_log(const char *format, ...) {
+	if (g_level <= STATSRELAY_LOG_ERROR) {
+		bool orig_verbose = g_verbose;
+		g_verbose = true;
+		va_list args;
+		va_start(args, format);
+		stats_vlog("ERROR: ", format, args);
+		va_end(args);
+		g_verbose = orig_verbose;
 	}
 }
 

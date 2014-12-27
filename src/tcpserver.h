@@ -10,7 +10,10 @@
 typedef struct tcpserver_t tcpserver_t;
 
 tcpserver_t *tcpserver_create(struct ev_loop *loop, void *data);
-int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char *default_port, void *(*cb_conn)(int, void *), int (*cb_recv)(int, void *, void *));
+int tcpserver_bind(tcpserver_t *server,
+		   const char *address_and_port,
+		   void *(*cb_conn)(int, void *),
+		   int (*cb_recv)(int, void *, void *));
 void tcpserver_destroy(tcpserver_t *server);
 
 

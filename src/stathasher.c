@@ -1,121 +1,102 @@
-#include "config.h"
-#include "ketama.h"
-#include "log.h"
-#include "stats.h"
-
-#include <signal.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <ctype.h>
 #include <getopt.h>
-#include <glib.h>
-#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include "./hashring.h"
+#include "./yaml_config.h"
 
 static struct option long_options[] = {
-	{"config",			required_argument,	NULL, 'c'},
-	{"verbose",			no_argument,		NULL, 'v'},
-	{"help",			no_argument,		NULL, 'h'},
+	{"config",		required_argument,	NULL, 'c'},
+	{"help",		no_argument,		NULL, 'h'},
 };
 
-typedef struct statsrelay_options_t {
-	char *filename;
-	int verbose;
-} statsrelay_options_t;
-
-struct stats_server_t {
-	char *ketama_filename;
-	ketama_continuum kc;
-	GHashTable *backends;
-	GHashTable *ketama_cache;
-	struct ev_loop *loop;
-
-	uint64_t max_send_queue;
-	int validate_lines;
-
-	uint64_t bytes_recv_udp;
-	uint64_t bytes_recv_tcp;
-	uint64_t total_connections;
-	uint64_t malformed_lines;
-	time_t last_reload;
-};
-
-static stats_server_t *server = NULL;
-
+static void* my_strdup(const char *str, void *unused_data) {
+	return strdup(str);
+}
 
 static void print_help(const char *argv0) {
-	fprintf(stderr, "Usage: %s [options] [FILENAME]                         \n\
-    --help                  Display this message                            \n\
-    --verbose               Write log messages to stderr in addition to     \n\
-                            syslog                                          \n\
-    --config=filename       Use the given ketama config file                \n\
-                            (default: /etc/statsrelay.conf)                 \n",
-		argv0);
+	printf("Usage: %s [-h] [-c /path/to/config.yaml]", argv0);
 }
 
 int main(int argc, char **argv) {
-	statsrelay_options_t options;
-	int option_index = 0;
+	char *config_name = (char *) default_config;
 	char c = 0;
-    FILE *input;
-    char *lineptr;
-    size_t linelen, len;
-    mcs *ks;
-
-	options.filename = "/etc/statsrelay.conf";
-	options.verbose = 0;
-
 	while (c != -1) {
-		c = getopt_long(argc, argv, "c:vh", long_options, &option_index);
-
+		c = getopt_long(argc, argv, "c:h", long_options, NULL);
 		switch (c) {
-			case -1:
-				break;
-			case 0:
-			case 'h':
-				print_help(argv[0]);
-				return 1;
-			case 'v':
-				options.verbose = 1;
-				break;
-			case 'c':
-				options.filename = optarg;
-				break;
-			default:
-				stats_log("main: Unknown argument %c", c);
-				return 3;
+		case -1:
+			break;
+		case 0:
+		case 'h':
+			print_help(argv[0]);
+			return 0;
+		case 'c':
+			config_name = optarg;
+			break;
+		default:
+			printf("%s: Unknown argument %c\n", argv[0], c);
+			return 1;
 		}
 	}
-
-	server = stats_server_create(options.filename, NULL, NULL, NULL);
-
-	if (server == NULL) {
-		stats_log("main: Unable to create stats_server");
+	if (optind != 1 && optind != 3) {
+		printf("%s: unexpected command optoins\n", argv[0]);
 		return 1;
 	}
 
-	stats_log_verbose(options.verbose);
+	FILE *config_file = fopen(config_name, "r");
+	if (config_file == NULL) {
+		fprintf(stderr, "failed to open %s\n", config_name);
+		return 1;
+	}
+	struct config *app_cfg = parse_config(config_file);
 
-    if (optind >= argc) {
-        input = stdin;
-    } else {
-        input = fopen(argv[optind], "r");
-        if (input == NULL) {
-            printf("Could not open %s", argv[optind]);
-            stats_log_end();
-            return 1;
-        }
-    }
+	fclose(config_file);
+	if (app_cfg == NULL) {
+		fprintf(stderr, "failed to parse config %s\n", config_name);
+		return 1;
+	}
 
-    lineptr = NULL;
-    while ((len = getline(&lineptr, &linelen, input)) != -1) {
-        lineptr[len-1] = '\0';
-        ks = ketama_get_server(lineptr, len, server->kc);
-        printf("%s\n", ks->ip);
-        free(lineptr);
-        lineptr = NULL;
-    }
-	stats_log_end();
+	hashring_t carbon_ring = NULL, statsd_ring = NULL;
+
+	if (app_cfg->carbon_config.initialized) {
+		carbon_ring = hashring_load_from_config(
+			&app_cfg->carbon_config, NULL, my_strdup, free);
+	}
+	if (app_cfg->statsd_config.initialized) {
+		statsd_ring = hashring_load_from_config(
+			&app_cfg->statsd_config, NULL, my_strdup, free);
+	}
+	destroy_config(app_cfg);
+
+	uint32_t shard;
+	char *choice = NULL;
+	char *line = NULL;
+	size_t len;
+	ssize_t bytes_read;
+	while ((bytes_read = getline(&line, &len, stdin)) != -1) {
+		// trim whitespace
+		for (ssize_t i = 0; i < bytes_read; i++) {
+			if (isspace(line[i])) {
+				line[i] = '\0';
+				break;
+			}
+		}
+		printf("key=%s", line);
+		choice = hashring_choose(carbon_ring, line, &shard);
+		if (choice != NULL) {
+			printf(" carbon=%s carbon_shard=%d", choice, shard);
+		}
+		choice = hashring_choose(statsd_ring, line, &shard);
+		if (choice != NULL) {
+			printf(" statsd=%s statsd_shard=%d", choice, shard);
+		}
+		putchar('\n');
+		fflush(stdout);
+	}
+	free(line);
+	hashring_dealloc(carbon_ring);
+	hashring_dealloc(statsd_ring);
 	return 0;
 }

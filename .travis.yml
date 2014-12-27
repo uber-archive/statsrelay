@@ -2,7 +2,7 @@ language: c
 compiler: gcc
 before_install:
   - sudo apt-get update -qq
-  - sudo apt-get install -qq automake libev-dev libglib2.0-dev libssl-dev pkg-config cppcheck
+  - sudo apt-get install -qq automake libev-dev libyaml-dev pkg-config cppcheck
 script: "autoreconf --install && ./configure && make && make check && cppcheck --enable=all --verbose --suppress=variableScope src/"
 
 env:

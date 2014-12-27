@@ -1,6 +1,8 @@
 #include "tcpserver.h"
 #include "log.h"
 
+#include <stdio.h>
+
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -47,8 +49,8 @@ struct tcpsession_t {
 	int (*cb_recv)(int, void *, void *);
 	struct sockaddr_storage client_addr;
 	void *ctx;
+	void (*ctx_dealloc)(void *);
 };
-
 
 static tcpsession_t *tcpsession_create(tcplistener_t *listener) {
 	tcpsession_t *session;
@@ -69,6 +71,8 @@ static tcpsession_t *tcpsession_create(tcplistener_t *listener) {
 	session->sd = -1;
 	session->cb_recv = listener->cb_recv;
 	session->watcher->data = (void *)session;
+	session->ctx = NULL;
+	session->ctx_dealloc = NULL;
 	return session;
 }
 
@@ -83,7 +87,9 @@ static void tcpsession_destroy(tcpsession_t *session) {
 
 // Called every time the session socket is readable (data available)
 // if you don't consume it, it'll get called again very quickly
-static void tcpsession_recv_callback(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+static void tcpsession_recv_callback(struct ev_loop *loop,
+				     struct ev_io *watcher,
+				     int revents) {
 	tcpsession_t *session;
 
 	if (revents & EV_ERROR) {
@@ -111,11 +117,12 @@ static void tcpsession_recv_callback(struct ev_loop *loop, struct ev_io *watcher
 	}
 }
 
-
-
 // Called every time the server socket is readable (new connection to be accepted)
 // if you don't consume it, it'll get called again very quickly
-static void tcplistener_accept_callback(struct ev_loop *loop, struct ev_io *watcher, int revents) {
+static void tcplistener_accept_callback(struct ev_loop *loop,
+					struct ev_io *watcher,
+					int revents) {
+	stats_debug_log("in tcplistener_accept_callback");
 	socklen_t sin_size;
 	tcplistener_t *listener;
 	tcpsession_t *session;
@@ -137,6 +144,7 @@ static void tcplistener_accept_callback(struct ev_loop *loop, struct ev_io *watc
 
 	sin_size = sizeof(session->client_addr);
 	session->sd = accept(watcher->fd, (struct sockaddr *)&session->client_addr, &sin_size);
+	stats_debug_log("tcpserver: accepted new tcp client connection, client fd = %d, tcp server fd = %d", session->sd, watcher->fd);
 	if (session->sd < 0) {
 		stats_log("tcplistener: Error accepting connection: %s", strerror(errno));
 		return;
@@ -165,7 +173,10 @@ tcpserver_t *tcpserver_create(struct ev_loop *loop, void *data) {
 }
 
 
-static tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *addr, void *(*cb_conn)(int, void *), int (*cb_recv)(int, void *, void *)) {
+static tcplistener_t *tcplistener_create(tcpserver_t *server,
+					 struct addrinfo *addr,
+					 void *(*cb_conn)(int, void *),
+					 int (*cb_recv)(int, void *, void *)) {
 	tcplistener_t *listener;
 	char addr_string[INET6_ADDRSTRLEN];
 	void *ip;
@@ -173,7 +184,7 @@ static tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *a
 	int yes = 1;
 	int err;
 
-	listener = (tcplistener_t *)malloc(sizeof(tcplistener_t));
+	listener = malloc(sizeof(tcplistener_t));
 	listener->loop = server->loop;
 	listener->data = server->data;
 	listener->cb_conn = cb_conn;
@@ -233,11 +244,12 @@ static tcplistener_t *tcplistener_create(tcpserver_t *server, struct addrinfo *a
 		return NULL;
 	}
 
-	listener->watcher = (struct ev_io *)malloc(sizeof(struct ev_io));
-	listener->watcher->data = (void *)listener;
+	listener->watcher = malloc(sizeof(struct ev_io));
+	listener->watcher->data = (void *) listener;
 
 	ev_io_init(listener->watcher, tcplistener_accept_callback, listener->sd, EV_READ);
-	stats_log("tcpserver: Listening on %s[:%i]", addr_string, port);
+	stats_log("tcpserver: Listening on frontend %s[:%i], fd = %d",
+		  addr_string, port, listener->sd);
 
 	return listener;
 }
@@ -252,7 +264,10 @@ static void tcplistener_destroy(tcpserver_t *server, tcplistener_t *listener) {
 }
 
 
-int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char *default_port, void *(*cb_conn)(int, void *), int (*cb_recv)(int, void *, void *)) {
+int tcpserver_bind(tcpserver_t *server,
+		   const char *address_and_port,
+		   void *(*cb_conn)(int, void *),
+		   int (*cb_recv)(int, void *, void *)) {
 	tcplistener_t *listener;
 	struct addrinfo hints;
 	struct addrinfo *addrs, *p;
@@ -260,16 +275,18 @@ int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char
 
 	char *address = strdup(address_and_port);
 	if (address == NULL) {
-		stats_log("tcpserver: strdup(3) failed");
+		stats_error_log("tcpserver: strdup(3) failed");
 		return 1;
 	}
 
 	char *ptr = strrchr(address_and_port, ':');
-	const char *port = ptr == NULL ? default_port : ptr + 1;
-
-	if (ptr != NULL) {
-		address[ptr - address_and_port] = '\0';
+	if (ptr == NULL) {
+		free(address);
+		stats_error_log("tcpserver: missing port");
+		return 1;
 	}
+	const char *port = ptr + 1;
+	address[ptr - address_and_port] = '\0';
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
@@ -306,7 +323,6 @@ int tcpserver_bind(tcpserver_t *server, const char *address_and_port, const char
 	freeaddrinfo(addrs);
 	return 0;
 }
-
 
 void tcpserver_destroy(tcpserver_t *server) {
 	for (int i = 0; i < server->listeners_len; i++) {
