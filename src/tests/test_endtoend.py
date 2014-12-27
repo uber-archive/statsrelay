@@ -250,7 +250,7 @@ class StatsdTestCase(TestCase):
 
             # ensure it took about cork_time ms
             self.assertGreater(elapsed, cork_time * 0.95)
-            self.assertKess(elapsed, cork_time * 1.25)
+            self.assertLess(elapsed, cork_time * 1.25)
 
             # try sending w/o corking... this assumes the mtu of the
             # loopback interface is 64k. need to send multiple
