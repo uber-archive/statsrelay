@@ -248,8 +248,9 @@ class StatsdTestCase(TestCase):
             self.check_recv(fd, msg)
             elapsed = time.time() - t0
 
-            # data should be corked, so we should need to wait 200ms
-            self.assertAlmostEqual(elapsed, cork_time, places=2)
+            # ensure it took about cork_time ms
+            self.assertGreater(elapsed, cork_time * 0.95)
+            self.assertKess(elapsed, cork_time * 1.25)
 
             # try sending w/o corking... this assumes the mtu of the
             # loopback interface is 64k. need to send multiple
