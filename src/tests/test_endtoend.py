@@ -236,6 +236,10 @@ class StatsdTestCase(TestCase):
                              backends[key]['bytes_sent'])
 
     def test_tcp_cork(self):
+        if not sys.platform.startswith('linux'):
+            return
+        if sys.version_info[:2] < (2, 7):
+            return
         cork_time = 0.200  # cork time is 200ms on linux
         self.tcp_cork = 'true'
         msg = 'test:1|c\n'
