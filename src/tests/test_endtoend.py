@@ -272,6 +272,16 @@ class StatsdTestCase(TestCase):
             elapsed = time.time() - t0
             self.assertLess(elapsed, cork_time / 2)
 
+    def test_invalid_line_for_pull_request_35(self):
+        with self.generate_config('udp') as config_path:
+            self.launch_process(config_path)
+            sender = self.connect('udp', self.bind_statsd_port)
+            sender.sendall('foo.bar:undefined|quux.quuxly.200:1c\n')
+            sender.sendall('foo.bar:1|c\n')
+            fd = self.statsd_listener
+            self.check_recv(fd, 'foo.bar:1|c\n')
+            self.assert_(self.proc.returncode is None)
+
 
 class CarbonTestCase(TestCase):
 
