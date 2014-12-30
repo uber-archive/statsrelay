@@ -3,6 +3,7 @@ A consistent-hashing relay for statsd and carbon metrics
 
 [![Build Status](https://travis-ci.org/uber/statsrelay.svg?branch=master)](https://travis-ci.org/uber/statsrelay)
 [![Coverity Status](https://scan.coverity.com/projects/2789/badge.svg)](https://scan.coverity.com/projects/2789)
+[![Mailing List](https://groups.google.com/forum/#!forum/statsrelay-dev)](https://groups.google.com/forum/#!forum/statsrelay-dev)
 
 # License
 MIT License
@@ -40,6 +41,7 @@ Usage: statsrelay [options]
                                (default: /etc/statsrelay.yaml)
   -t, --check-config=filename  Check the config syntax
                                (default: /etc/statsrelay.yaml)
+  --version                    Print the version
 ```
 
 ```
