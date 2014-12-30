@@ -156,6 +156,7 @@ int udpserver_bind(udpserver_t *server,
 	char *ptr = strrchr(address_and_port, ':');
 	if (ptr == NULL) {
 		stats_error_log("udpserver: missing port");
+		free(address);
 		return 1;
 	}
 	const char *port = ptr + 1;

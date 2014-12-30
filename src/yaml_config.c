@@ -31,7 +31,7 @@ static void init_proto_config(struct proto_config *protoc) {
 	protoc->initialized = false;
 	protoc->bind = NULL;
 	protoc->enable_validation = true;
-	protoc->enable_tcp_cork = false;
+	protoc->enable_tcp_cork = true;
 	protoc->max_send_queue = 134217728;
 	protoc->ring = statsrelay_list_new();
 }

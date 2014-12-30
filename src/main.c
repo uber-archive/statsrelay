@@ -24,6 +24,7 @@ static struct option long_options[] = {
 	{"config",		required_argument,	NULL, 'c'},
 	{"check-config",	required_argument,	NULL, 't'},
 	{"verbose",		no_argument,		NULL, 'v'},
+	{"version",		no_argument,		NULL, 'V'},
 	{"log-level",		required_argument,	NULL, 'l'},
 	{"help",		no_argument,		NULL, 'h'},
 };
@@ -71,7 +72,8 @@ static void print_help(const char *argv0) {
 		"  -c, --config=filename        Use the given hashring config file\n"
 		"                               (default: %s)\n"
 		"  -t, --check-config=filename  Check the config syntax\n"
-		"                               (default: %s)\n",
+		"                               (default: %s)\n"
+		"  --version                    Print the version\n",
 		argv0,
 		default_config,
 		default_config);
@@ -97,6 +99,9 @@ int main(int argc, char **argv) {
 		case 'v':
 			stats_log_verbose(true);
 			break;
+		case 'V':
+			puts(PACKAGE_STRING);
+			return 0;
 		case 'l':
 			lower = to_lower(optarg);
 			if (lower == NULL) {
@@ -121,7 +126,7 @@ int main(int argc, char **argv) {
 			just_check_config = true;
 			break;
 		default:
-			fprintf(stderr, "%s: Unknown argument %c", argv[0], c);
+			fprintf(stderr, "%s: Unknown argument %c\n", argv[0], c);
 			goto err;
 		}
 	}

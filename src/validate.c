@@ -29,12 +29,12 @@ int validate_statsd(const char *line, size_t len) {
 	plen = len;
 	end = memchr(start, ':', plen);
 	if (end == NULL) {
-		stats_log("validate: Invalid line \"%s\" missing ':'", line);
+		stats_log("validate: Invalid line \"%.*s\" missing ':'", len, line);
 		goto statsd_err;
 	}
 
 	if ((end - start) < 1) {
-		stats_log("validate: Invalid line \"%s\" zero length key", line);
+		stats_log("validate: Invalid line \"%.*s\" zero length key", len, line);
 		goto statsd_err;
 	}
 
@@ -44,14 +44,14 @@ int validate_statsd(const char *line, size_t len) {
 	c = end[0];
 	end[0] = '\0';
 	if ((strtod(start, &err) == 0.0) && (err == start)) {
-		stats_log("validate: Invalid line \"%s\" unable to parse value as double", line);
+		stats_log("validate: Invalid line \"%.*s\" unable to parse value as double", len, line);
 		goto statsd_err;
 	}
 	end[0] = c;
 
 	end = memchr(start, '|', plen);
 	if (end == NULL) {
-		stats_log("validate: Invalid line \"%s\" missing '|'", line);
+		stats_log("validate: Invalid line \"%.*s\" missing '|'", len, line);
 		goto statsd_err;
 	}
 
@@ -77,7 +77,7 @@ int validate_statsd(const char *line, size_t len) {
 	}
 
 	if (valid == 0) {
-		stats_log("validate: Invalid line \"%s\" unknown stat type \"%s\"", line, start);
+		stats_log("validate: Invalid line \"%.*s\" unknown stat type \"%.*s\"", len, line, plen, start);
 		goto statsd_err;
 	}
 
@@ -89,15 +89,15 @@ int validate_statsd(const char *line, size_t len) {
 			start = end + 2;
 			plen = len - (start - line_copy);
 			if (plen == 0) {
-				stats_log("validate: Invalid line \"%s\" @ sample with no rate", line);
+				stats_log("validate: Invalid line \"%.*s\" @ sample with no rate", len, line);
 				goto statsd_err;
 			}
 			if ((strtod(start, &err) == 0.0) && err == start) {
-				stats_log("validate: Invalid line \"%s\" invalid sample rate", line);
+				stats_log("validate: Invalid line \"%.*s\" invalid sample rate", len, line);
 				goto statsd_err;
 			}
 		} else {
-			stats_log("validate: Invalid line \"%s\" no @ sample rate specifier", line);
+			stats_log("validate: Invalid line \"%.*s\" no @ sample rate specifier", len, line);
 			goto statsd_err;
 		}
 	}
