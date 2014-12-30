@@ -44,9 +44,9 @@ do_start()
 	#   0 if daemon has been started
 	#   1 if daemon was already running
 	#   2 if daemon could not be started
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
+	start-stop-daemon --start --quiet --chuid statsrelay --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
 		|| return 1
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON \
+	start-stop-daemon --start --quiet --chuid statsrelay --pidfile $PIDFILE --exec $DAEMON \
         --make-pidfile \
         --background -- \
 		$DAEMON_ARGS \
