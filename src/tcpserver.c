@@ -95,23 +95,23 @@ static void tcpsession_recv_callback(struct ev_loop *loop,
 	if (revents & EV_ERROR) {
 		// ev(3) says this is an error of "unspecified" type, so
 		// that's bloody useful.
-		stats_log("tcpsession: libev server socket error");
+		stats_error_log("tcpsession: libev server socket error");
 		return;
 	}
 
 	session = (tcpsession_t *)watcher->data;
 	if (session == NULL) {
-		stats_log("tcpsession: Unable to determine tcpsession, not calling recv callback");
+		stats_error_log("tcpsession: Unable to determine tcpsession, not calling recv callback");
 		return;
 	}
 
 	if (session->cb_recv == NULL) {
-		stats_log("tcpsession: No recv callback registered for session, ignoring event");
+		stats_error_log("tcpsession: No recv callback registered for session, ignoring event");
 		return;
 	}
 
 	if (session->cb_recv(session->sd, session->data, session->ctx) != 0) {
-		//stats_log("tcpsession: recv callback returned non-zero, closing connection");
+		//stats_error_log("tcpsession: recv callback returned non-zero, closing connection");
 		tcpsession_destroy(session);
 		return;
 	}
@@ -131,14 +131,14 @@ static void tcplistener_accept_callback(struct ev_loop *loop,
 	if (revents & EV_ERROR) {
 		// ev(3) says this is an error of "unspecified" type, so
 		// that's bloody useful.
-		stats_log("tcplistener: libev server socket error");
+		stats_error_log("tcplistener: libev server socket error");
 		return;
 	}
 
 	listener = (tcplistener_t *) watcher->data;
 	session = tcpsession_create(listener);
 	if (session == NULL) {
-		stats_log("tcplistener: Unable to allocate tcpsession, not calling accept()");
+		stats_error_log("tcplistener: Unable to allocate tcpsession, not calling accept()");
 		return;
 	}
 
@@ -146,13 +146,13 @@ static void tcplistener_accept_callback(struct ev_loop *loop,
 	session->sd = accept(watcher->fd, (struct sockaddr *)&session->client_addr, &sin_size);
 	stats_debug_log("tcpserver: accepted new tcp client connection, client fd = %d, tcp server fd = %d", session->sd, watcher->fd);
 	if (session->sd < 0) {
-		stats_log("tcplistener: Error accepting connection: %s", strerror(errno));
+		stats_error_log("tcplistener: Error accepting connection: %s", strerror(errno));
 		return;
 	}
 
 	err = fcntl(session->sd, F_SETFL, (fcntl(session->sd, F_GETFL) | O_NONBLOCK));
 	if (err != 0) {
-		stats_log("tcplistener: Error setting socket to non-blocking: %s", strerror(errno));
+		stats_error_log("tcplistener: Error setting socket to non-blocking: %s", strerror(errno));
 		return;
 	}
 
@@ -205,41 +205,41 @@ static tcplistener_t *tcplistener_create(tcpserver_t *server,
 		port = ntohs(ipv6->sin6_port);
 	}
 	if (inet_ntop(addr->ai_family, ip, addr_string, addr->ai_addrlen) == NULL) {
-		stats_log("tcplistener: Unable to format network address string");
+		stats_error_log("tcplistener: Unable to format network address string");
 		free(listener);
 		return NULL;
 	}
 
 	if (listener->sd < 0) {
-		stats_log("tcplistener: Error creating socket %s[:%i]: %s", addr_string, port, strerror(errno));
+		stats_error_log("tcplistener: Error creating socket %s[:%i]: %s", addr_string, port, strerror(errno));
 		free(listener);
 		return NULL;
 	}
 
 	err = setsockopt(listener->sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
 	if (err != 0) {
-		stats_log("tcplistener: Error setting SO_REUSEADDR on %s[:%i]: %s", addr_string, port, strerror(errno));
+		stats_error_log("tcplistener: Error setting SO_REUSEADDR on %s[:%i]: %s", addr_string, port, strerror(errno));
 		free(listener);
 		return NULL;
 	}
 
 	err = fcntl(listener->sd, F_SETFL, (fcntl(listener->sd, F_GETFL) | O_NONBLOCK));
 	if (err != 0) {
-		stats_log("tcplistener: Error setting socket to non-blocking for %s[:%i]: %s", addr_string, port, strerror(errno));
+		stats_error_log("tcplistener: Error setting socket to non-blocking for %s[:%i]: %s", addr_string, port, strerror(errno));
 		free(listener);
 		return NULL;
 	}
 
 	err = bind(listener->sd, addr->ai_addr, addr->ai_addrlen);
 	if (err != 0) {
-		stats_log("tcplistener: Error binding socket for %s[:%i]: %s", addr_string, port, strerror(errno));
+		stats_error_log("tcplistener: Error binding socket for %s[:%i]: %s", addr_string, port, strerror(errno));
 		free(listener);
 		return NULL;
 	}
 
 	err = listen(listener->sd, LISTEN_BACKLOG);
 	if (err != 0) {
-		stats_log("tcplistener: Error listening to socket %s[:%i]: %s", addr_string, port, strerror(errno));
+		stats_error_log("tcplistener: Error listening to socket %s[:%i]: %s", addr_string, port, strerror(errno));
 		free(listener);
 		return NULL;
 	}
@@ -296,13 +296,13 @@ int tcpserver_bind(tcpserver_t *server,
 	err = getaddrinfo(address, port, &hints, &addrs);
 	if (err != 0) {
 		free(address);
-		stats_log("tcpserver: getaddrinfo error: %s", gai_strerror(err));
+		stats_error_log("tcpserver: getaddrinfo error: %s", gai_strerror(err));
 		return 1;
 	}
 
 	for (p = addrs; p != NULL; p = p->ai_next) {
 		if (server->listeners_len >= MAX_TCP_HANDLERS) {
-			stats_log("tcpserver: Unable to create more than %i TCP listeners", MAX_TCP_HANDLERS);
+			stats_error_log("tcpserver: Unable to create more than %i TCP listeners", MAX_TCP_HANDLERS);
 			free(address);
 			freeaddrinfo(addrs);
 			return 1;
