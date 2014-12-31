@@ -478,7 +478,7 @@ int stats_recv(int sd, void *data, void *ctx) {
 		stats_log("stats: Error receiving from socket: %s", strerror(errno));
 		goto stats_recv_err;
 	} else if (bytes_read == 0) {
-		stats_debug_log("stats: client from fd %d closed conncetion", sd);
+		stats_debug_log("stats: client from fd %d closed connection", sd);
 		goto stats_recv_err;
 	} else {
 		stats_debug_log("stats: received %zd bytes from tcp client fd %d", bytes_read, sd);
