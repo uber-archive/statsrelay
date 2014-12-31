@@ -1,3 +1,9 @@
+statsrelay (1.5.9-2) unstable; urgency=medium
+
+  * Restart daemon after package upgrade
+
+ -- Evan Klitzke <evan@uber.com>  Wed, 31 Dec 2014 14:46:32 -0800
+
 statsrelay (1.5.9-1) unstable; urgency=medium
 
   * New upstream release
