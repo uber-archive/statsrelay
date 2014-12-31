@@ -62,7 +62,7 @@ backend is open, the line is queued and a connection attempt is
 started. Once a connection is established, all queued metrics are
 relayed to the backend and the queue is emptied. If the backend
 connection fails, the queue persists in memory and the connection will
-be retried after 5 seconds. Any stats received for that backend during
+be retried after one second. Any stats received for that backend during
 the retry window are added to the queue.
 
 Each backend has its own send queue. If a send queue reaches
