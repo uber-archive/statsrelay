@@ -344,17 +344,17 @@ void stats_send_statistics(stats_session_t *session) {
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-		"global bytes_recv_udp counter %" PRIu64 "\n",
+		"global bytes_recv_udp gauge %" PRIu64 "\n",
 		session->server->bytes_recv_udp));
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-		"global bytes_recv_tcp counter %" PRIu64 "\n",
+		"global bytes_recv_tcp gauge %" PRIu64 "\n",
 		session->server->bytes_recv_tcp));
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-		"global total_connections counter %" PRIu64 "\n",
+		"global total_connections gauge %" PRIu64 "\n",
 		session->server->total_connections));
 
 	buffer_produced(response,
@@ -364,7 +364,7 @@ void stats_send_statistics(stats_session_t *session) {
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-		"global malformed_lines counter %" PRIu64 "\n",
+		"global malformed_lines gauge %" PRIu64 "\n",
 		session->server->malformed_lines));
 
 	for (size_t i = 0; i < session->server->num_backends; i++) {
@@ -372,22 +372,22 @@ void stats_send_statistics(stats_session_t *session) {
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-			"backend:%s bytes_queued counter %" PRIu64 "\n",
+			"backend:%s bytes_queued gauge %" PRIu64 "\n",
 			backend->key, backend->bytes_queued));
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-			"backend:%s bytes_sent counter %" PRIu64 "\n",
+			"backend:%s bytes_sent gauge %" PRIu64 "\n",
 			backend->key, backend->bytes_sent));
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-			"backend:%s relayed_lines counter %" PRIu64 "\n",
+			"backend:%s relayed_lines gauge %" PRIu64 "\n",
 			backend->key, backend->relayed_lines));
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-			"backend:%s dropped_lines counter %" PRIu64 "\n",
+			"backend:%s dropped_lines gauge %" PRIu64 "\n",
 			backend->key, backend->dropped_lines));
 
 		buffer_produced(response,
