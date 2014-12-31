@@ -62,7 +62,7 @@ backend is open, the line is queued and a connection attempt is
 started. Once a connection is established, all queued metrics are
 relayed to the backend and the queue is emptied. If the backend
 connection fails, the queue persists in memory and the connection will
-be retried after 5 seconds. Any stats received for that backend during
+be retried after one second. Any stats received for that backend during
 the retry window are added to the queue.
 
 Each backend has its own send queue. If a send queue reaches
@@ -88,15 +88,15 @@ stats example:
 ```
 $ echo status | nc localhost 8125
 
-global bytes_recv_udp counter 0
-global bytes_recv_tcp counter 41
-global total_connections counter 1
+global bytes_recv_udp gauge 0
+global bytes_recv_tcp gauge 41
+global total_connections gauge 1
 global last_reload timestamp 0
-global malformed_lines counter 0
-backend:127.0.0.2:8127:tcp bytes_queued counter 27
-backend:127.0.0.2:8127:tcp bytes_sent counter 27
-backend:127.0.0.2:8127:tcp relayed_lines counter 3
-backend:127.0.0.2:8127:tcp dropped_lines counter 0
+global malformed_lines gauge 0
+backend:127.0.0.2:8127:tcp bytes_queued gauge 27
+backend:127.0.0.2:8127:tcp bytes_sent gauge 27
+backend:127.0.0.2:8127:tcp relayed_lines gauge 3
+backend:127.0.0.2:8127:tcp dropped_lines gauge 0
 
 ```
 

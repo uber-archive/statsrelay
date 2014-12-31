@@ -19,7 +19,6 @@
 #include "./tcpclient.h"
 #include "./validate.h"
 
-#define BACKEND_RETRY_TIMEOUT 5
 #define MAX_UDP_LENGTH 65536
 
 typedef struct {
@@ -171,7 +170,7 @@ static void* make_backend(const char *host_and_port, void *data) {
 	}
 
 	if (tcpclient_connect(&backend->client, host, port, protocol)) {
-		stats_log("stats: failed to conect tcpclient");
+		stats_log("stats: failed to connect tcpclient");
 		goto make_err;
 	}
 	backend->bytes_queued = 0;
@@ -344,17 +343,17 @@ void stats_send_statistics(stats_session_t *session) {
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-		"global bytes_recv_udp counter %" PRIu64 "\n",
+		"global bytes_recv_udp gauge %" PRIu64 "\n",
 		session->server->bytes_recv_udp));
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-		"global bytes_recv_tcp counter %" PRIu64 "\n",
+		"global bytes_recv_tcp gauge %" PRIu64 "\n",
 		session->server->bytes_recv_tcp));
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-		"global total_connections counter %" PRIu64 "\n",
+		"global total_connections gauge %" PRIu64 "\n",
 		session->server->total_connections));
 
 	buffer_produced(response,
@@ -364,7 +363,7 @@ void stats_send_statistics(stats_session_t *session) {
 
 	buffer_produced(response,
 		snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-		"global malformed_lines counter %" PRIu64 "\n",
+		"global malformed_lines gauge %" PRIu64 "\n",
 		session->server->malformed_lines));
 
 	for (size_t i = 0; i < session->server->num_backends; i++) {
@@ -372,22 +371,22 @@ void stats_send_statistics(stats_session_t *session) {
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-			"backend:%s bytes_queued counter %" PRIu64 "\n",
+			"backend:%s bytes_queued gauge %" PRIu64 "\n",
 			backend->key, backend->bytes_queued));
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-			"backend:%s bytes_sent counter %" PRIu64 "\n",
+			"backend:%s bytes_sent gauge %" PRIu64 "\n",
 			backend->key, backend->bytes_sent));
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-			"backend:%s relayed_lines counter %" PRIu64 "\n",
+			"backend:%s relayed_lines gauge %" PRIu64 "\n",
 			backend->key, backend->relayed_lines));
 
 		buffer_produced(response,
 			snprintf((char *)buffer_tail(response), buffer_spacecount(response),
-			"backend:%s dropped_lines counter %" PRIu64 "\n",
+			"backend:%s dropped_lines gauge %" PRIu64 "\n",
 			backend->key, backend->dropped_lines));
 
 		buffer_produced(response,
@@ -510,71 +509,50 @@ stats_recv_err:
 int stats_udp_recv(int sd, void *data) {
 	stats_server_t *ss = (stats_server_t *)data;
 	ssize_t bytes_read;
-	buffer_t *buffer;
 	char *head, *tail;
-	size_t len;
 
+	static char buffer[MAX_UDP_LENGTH];
 	static char line_buffer[MAX_UDP_LENGTH + 2];
 
-	buffer = create_buffer(MAX_UDP_LENGTH);
-
-	bytes_read = read(sd, buffer_head(buffer), MAX_UDP_LENGTH);
+	bytes_read = read(sd, buffer, MAX_UDP_LENGTH);
 
 	if (bytes_read == 0) {
-		stats_log("stats: Got zero-length UDP payload. That's weird.");
+		stats_error_log("stats: Unexpectedly received zero-length UDP payload.");
 		goto udp_recv_err;
-	}
-
-	if (bytes_read < 0) {
+	} else if (bytes_read < 0) {
 		if (errno == EAGAIN) {
-			stats_log("stats: interrupted during recvfrom");
+			stats_error_log("stats: interrupted during recvfrom");
 			goto udp_recv_err;
 		} else {
-			stats_log("stats: Error calling recvfrom: %s", strerror(errno));
+			stats_error_log("stats: Error calling recvfrom: %s", strerror(errno));
 			goto udp_recv_err;
 		}
 	} else {
 		stats_debug_log("stats: received %zd bytes from udp fd %d", bytes_read, sd);
 	}
 
-	if (buffer_produced(buffer, bytes_read) != 0) {
-		stats_log("stats: failed to buffer_produced()\n");
-		goto udp_recv_err;
-	}
 	ss->bytes_recv_udp += bytes_read;
 
-	while (1) {
-		int datasize = buffer_datacount(buffer);
-		if (datasize <= 0) {
-			break;
+	size_t line_len;
+	size_t offset = 0;
+	while (offset < bytes_read) {
+		head = (char *) buffer + offset;
+		if ((tail = memchr(head, '\n', bytes_read - offset)) == NULL) {
+			tail = buffer + bytes_read;
 		}
-		head = (char *) buffer_head(buffer);
-		tail = memchr(head, '\n', datasize);
-		if (tail == NULL) {
-			break;
-		}
-		len = tail - head;
-		memcpy(line_buffer, head, len);
-		memcpy(line_buffer + len, "\n\0", 2);
 
-		if (stats_relay_line(line_buffer, len, ss) != 0) {
+		line_len = tail - head;
+		memcpy(line_buffer, head, line_len);
+		memcpy(line_buffer + line_len, "\n\0", 2);
+
+		if (stats_relay_line(line_buffer, line_len, ss) != 0) {
 			goto udp_recv_err;
 		}
-		buffer_consume(buffer, len + 1);  // Add 1 to include the '\n'
+		offset += line_len + 1;
 	}
-
-	len = buffer_datacount(buffer);
-	if (len > 0) {
-		if (stats_relay_line(buffer_head(buffer), len, ss) != 0) {
-			goto udp_recv_err;
-		}
-	}
-
-	delete_buffer(buffer);
 	return 0;
 
 udp_recv_err:
-	delete_buffer(buffer);
 	return 1;
 }
 
