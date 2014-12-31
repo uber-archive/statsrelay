@@ -128,7 +128,7 @@ static void tcpclient_read_event(struct ev_loop *loop, struct ev_io *watcher, in
 		ev_io_stop(client->loop, &client->write_watcher.watcher);
 		close(client->sd);
 		free(buf);
-		tcpclient_set_state(client, STATE_BACKOFF);
+		tcpclient_set_state(client, STATE_INIT);
 		client->last_error = time(NULL);
 		client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 		return;
