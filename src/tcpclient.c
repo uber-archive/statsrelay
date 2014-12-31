@@ -224,7 +224,7 @@ int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, c
 
 	if (client->state == STATE_BACKOFF) {
 		// If backoff timer has expired, change to STATE_INIT and call recursively
-		if ( (time(NULL) - client->last_error) > TCPCLIENT_RETRY_TIMEOUT ) {
+		if ((time(NULL) - client->last_error) > TCPCLIENT_RETRY_TIMEOUT) {
 			tcpclient_set_state(client, STATE_INIT);
 			return tcpclient_connect(client, host, port, protocol);
 		} else {

@@ -19,7 +19,6 @@
 #include "./tcpclient.h"
 #include "./validate.h"
 
-#define BACKEND_RETRY_TIMEOUT 5
 #define MAX_UDP_LENGTH 65536
 
 typedef struct {
