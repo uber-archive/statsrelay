@@ -218,9 +218,11 @@ parse_err:
 }
 
 void destroy_config(struct config *config) {
-	statsrelay_list_destroy_full(config->carbon_config.ring);
-	free(config->carbon_config.bind);
-	statsrelay_list_destroy_full(config->statsd_config.ring);
-	free(config->statsd_config.bind);
-	free(config);
+	if (config != NULL) {
+		statsrelay_list_destroy_full(config->carbon_config.ring);
+		free(config->carbon_config.bind);
+		statsrelay_list_destroy_full(config->statsd_config.ring);
+		free(config->statsd_config.bind);
+		free(config);
+	}
 }

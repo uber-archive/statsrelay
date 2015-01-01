@@ -84,6 +84,7 @@ int main(int argc, char **argv) {
 	char *lower;
 	char c = 0;
 	bool just_check_config = false;
+	struct config *cfg = NULL;
 	servers.initialized = false;
 
 	stats_set_log_level(STATSRELAY_LOG_INFO);  // set default value
@@ -136,17 +137,15 @@ int main(int argc, char **argv) {
 		init_server_collection(&servers, default_config);
 	}
 
-	struct config *cfg = load_config(servers.config_file);
+	cfg = load_config(servers.config_file);
 	if (cfg == NULL) {
 		stats_error_log("failed to parse config");
 		goto err;
 	}
 	if (just_check_config) {
-		destroy_config(cfg);
 		goto success;
 	}
 	bool worked = connect_server_collection(&servers, cfg);
-	destroy_config(cfg);
 	if (!worked) {
 		goto err;
 	}
@@ -166,11 +165,13 @@ int main(int argc, char **argv) {
 
 success:
 	destroy_server_collection(&servers);
+	destroy_config(cfg);
 	stats_log_end();
 	return 0;
 
 err:
 	destroy_server_collection(&servers);
+	destroy_config(cfg);
 	stats_log_end();
 	return 1;
 }
