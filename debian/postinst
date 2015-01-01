@@ -1,2 +1,5 @@
 #!/bin/sh
 adduser --system --no-create-home statsrelay
+if [ -x "/etc/init.d/statsrelay" ]; then
+  invoke-rc.d statsrelay start || exit $?
+fi

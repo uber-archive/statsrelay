@@ -1,3 +1,9 @@
+statsrelay (1.5.8-2) unstable; urgency=medium
+
+  * Fix restart on postinst
+
+ -- Daniel Chen <dchen@cephalopod>  Tue, 31 Dec 2014 17:22:33 -0800
+
 statsrelay (1.5.8-1) unstable; urgency=medium
 
   * New upstream release
