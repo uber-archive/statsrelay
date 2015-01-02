@@ -435,7 +435,7 @@ static int stats_process_lines(stats_session_t *session) {
 		memcpy(line_buffer, head, len);
 		memcpy(line_buffer + len, "\n\0", 2);
 
-		if (strcmp(line_buffer, "status\n") == 0) {
+		if (len == 6 && strcmp(line_buffer, "status\n") == 0) {
 			stats_send_statistics(session);
 		} else if (stats_relay_line(line_buffer, len, session->server) != 0) {
 			return 1;
@@ -478,7 +478,7 @@ int stats_recv(int sd, void *data, void *ctx) {
 		stats_log("stats: Error receiving from socket: %s", strerror(errno));
 		goto stats_recv_err;
 	} else if (bytes_read == 0) {
-		stats_debug_log("stats: client from fd %d closed conncetion", sd);
+		stats_debug_log("stats: client from fd %d closed connection", sd);
 		goto stats_recv_err;
 	} else {
 		stats_debug_log("stats: received %zd bytes from tcp client fd %d", bytes_read, sd);
