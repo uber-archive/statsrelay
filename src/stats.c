@@ -435,7 +435,7 @@ static int stats_process_lines(stats_session_t *session) {
 		memcpy(line_buffer, head, len);
 		memcpy(line_buffer + len, "\n\0", 2);
 
-		if (strcmp(line_buffer, "status\n") == 0) {
+		if (len == 6 && strcmp(line_buffer, "status\n") == 0) {
 			stats_send_statistics(session);
 		} else if (stats_relay_line(line_buffer, len, session->server) != 0) {
 			return 1;

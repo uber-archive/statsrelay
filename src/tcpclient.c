@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,9 +18,11 @@
 
 #include <ev.h>
 
-
 #define DEFAULT_BUFFER_SIZE (1<<16)
 
+static const char *tcpclient_state_name[] = {
+	"INIT", "CONNECTING", "BACKOFF", "CONNECTED", "TERMINATED"
+};
 
 static int tcpclient_default_callback(void *tc, enum tcpclient_event event, void *context, char *data, size_t len) {
 	// default is to do nothing
@@ -30,9 +33,6 @@ static int tcpclient_default_callback(void *tc, enum tcpclient_event event, void
 }
 
 static void tcpclient_set_state(tcpclient_t *client, enum tcpclient_state state) {
-	static const char *tcpclient_state_name[] = {
-		    "INIT", "CONNECTING", "BACKOFF", "CONNECTED", "TERMINATED"
-	};
 	stats_log("tcpclient[%s]: State transition %s -> %s",
 			client->name,
 			tcpclient_state_name[client->state],
@@ -167,8 +167,21 @@ static void tcpclient_write_event(struct ev_loop *loop, struct ev_io *watcher, i
 				stats_error_log("tcpclient[%s]: Unable to consume send queue", client->name);
 				return;
 			}
+			size_t qsize = buffer_datacount(&client->send_queue);
+			if (client->failing && qsize < client->config->max_send_queue) {
+				stats_log("tcpclient[%s]: client recovered from full queue, send queue is now %zd bytes",
+					  client->name,
+					  qsize);
+				client->failing = 0;
+			}
+			if (qsize == 0) {
+				ev_io_stop(client->loop, &client->write_watcher.watcher);
+				client->write_watcher.started = false;
+			}
 		}
 	} else {
+		// No data left in the client's buffer, stop waiting
+		// for write events.
 		ev_io_stop(client->loop, &client->write_watcher.watcher);
 		client->write_watcher.started = false;
 	}
@@ -323,22 +336,22 @@ int tcpclient_sendall(tcpclient_t *client, const char *buf, size_t len) {
 		stats_error_log("tcpclient[%s]: Cannot send before connect!", client->name);
 		return 1;
 	} else {
-		// Does nothing if we're already connected, triggers a reconnect if backoff
-		// has expired.
+		// Does nothing if we're already connected, triggers a
+		// reconnect if backoff has expired.
 		tcpclient_connect(client, NULL, NULL, NULL);
 	}
 
-	if (buffer_datacount(&client->send_queue) > client->config->max_send_queue) {
+	if (buffer_datacount(&client->send_queue) >= client->config->max_send_queue) {
 		if (client->failing == 0) {
-			stats_error_log("tcpclient[%s]: Send queue is full, dropping data", client->name);
+			stats_error_log("tcpclient[%s]: send queue for %s client is full (at %zd bytes, max is %" PRIu64 " bytes), dropping data",
+					client->name,
+					tcpclient_state_name[client->state],
+					buffer_datacount(&client->send_queue),
+					client->config->max_send_queue);
 			client->failing = 1;
 		}
 		return 2;
-	} else {
-		// recovered
-		client->failing = 0;
 	}
-
 	if (buffer_spacecount(sendq) < len) {
 		if (buffer_realign(sendq) != 0) {
 			stats_error_log("tcpclient[%s]: Unable to realign send queue", client->name);
