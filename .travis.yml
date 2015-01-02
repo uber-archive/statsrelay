@@ -22,4 +22,4 @@ addons:
     notification_email: statsrelay-dev@googlegroups.com
     build_command_prepend: "autoreconf --install && ./configure"
     build_command: "make"
-    branch_pattern: (coverity_scan|master)
+    branch_pattern: master
