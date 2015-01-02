@@ -124,6 +124,11 @@ int main(int argc, char **argv) {
 		goto err;
 	}
 
+	if(lines_sent == 0) {
+		printf("no lines sent\n");
+		goto err;
+	}
+
 	timersub(&t1, &t0, &total);
 	double total_micros = total.tv_sec * 1000000 + total.tv_usec;
 	printf("sent %zd lines in %lu microseconds = %6.3f microseconds per line\n",
