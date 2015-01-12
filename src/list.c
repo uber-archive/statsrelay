@@ -36,7 +36,7 @@ void* statsrelay_list_expand(list_t list) {
 			list->data = newdata;
 		}
 	}
-	return list->data + index * sizeof(void *);
+	return list->data + index;
 }
 
 void statsrelay_list_destroy(list_t list) {
