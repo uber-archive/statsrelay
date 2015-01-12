@@ -307,9 +307,6 @@ int tcpserver_bind(tcpserver_t *server,
 			freeaddrinfo(addrs);
 			return 1;
 		}
-		if ((address == NULL) && (p->ai_family != AF_INET6)) {
-			continue;
-		}
 		listener = tcplistener_create(server, p, cb_conn, cb_recv);
 		if (listener == NULL) {
 			continue;

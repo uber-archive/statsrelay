@@ -337,6 +337,33 @@ class CarbonTestCase(TestCase):
             self.run_checks(self.carbon_listener, 'udp')
 
 
+class StathasherTests(unittest.TestCase):
+
+    def get_foo(self, config):
+        proc = subprocess.Popen(['./stathasher', '-c', config],
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE)
+        proc.stdin.write('foo\n')
+        line = proc.stdout.readline()
+        return line
+
+    def test_stathasher(self):
+        line = self.get_foo('tests/stathasher.yaml')
+        self.assertEqual(line, 'key=foo carbon=127.0.0.1:2001 carbon_shard=1 statsd=127.0.0.1:3001 statsd_shard=1\n')  # noqa
+
+    def test_stathasher_empty(self):
+        line = self.get_foo('tests/empty.yaml')
+        self.assertEqual(line, 'key=foo\n')
+
+    def test_stathasher_just_carbon(self):
+        line = self.get_foo('tests/stathasher_just_carbon.yaml')
+        self.assertEqual(line, 'key=foo carbon=127.0.0.1:2001 carbon_shard=1\n')
+
+    def test_stathasher_just_statsd(self):
+        line = self.get_foo('tests/stathasher_just_statsd.yaml')
+        self.assertEqual(line, 'key=foo statsd=127.0.0.1:3001 statsd_shard=1\n')
+
+
 def main():
     unittest.main()
 
