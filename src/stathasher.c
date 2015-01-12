@@ -84,13 +84,17 @@ int main(int argc, char **argv) {
 			}
 		}
 		printf("key=%s", line);
-		choice = hashring_choose(carbon_ring, line, &shard);
-		if (choice != NULL) {
-			printf(" carbon=%s carbon_shard=%d", choice, shard);
+		if (carbon_ring != NULL) {
+			choice = hashring_choose(carbon_ring, line, &shard);
+			if (choice != NULL) {
+				printf(" carbon=%s carbon_shard=%d", choice, shard);
+			}
 		}
-		choice = hashring_choose(statsd_ring, line, &shard);
-		if (choice != NULL) {
-			printf(" statsd=%s statsd_shard=%d", choice, shard);
+		if (statsd_ring != NULL) {
+			choice = hashring_choose(statsd_ring, line, &shard);
+			if (choice != NULL) {
+				printf(" statsd=%s statsd_shard=%d", choice, shard);
+			}
 		}
 		putchar('\n');
 		fflush(stdout);
