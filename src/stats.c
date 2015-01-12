@@ -143,6 +143,7 @@ static void* make_backend(const char *host_and_port, void *data) {
 	}
 	if (full_key == NULL) {
 		stats_error_log("failed to create backend key");
+		goto make_err;
 	}
 
 	// Find the key in our list of backends
