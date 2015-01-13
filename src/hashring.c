@@ -63,13 +63,14 @@ bool hashring_add(hashring_t ring, const char *line) {
 	}
 
 	// grow the list
-	if (statsrelay_list_expand(ring->backends) == NULL) {
+	void **new_obj = statsrelay_list_expand(ring->backends);
+	if (new_obj == NULL) {
 		stats_error_log("hashring: failed to expand list");
 		ring->dealloc(obj);
 		goto add_err;
 	}
 
-	ring->backends->data[ring->backends->size - 1] = obj;
+	*new_obj = obj;
 	return true;
 
 add_err:

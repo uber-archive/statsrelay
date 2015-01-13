@@ -188,11 +188,12 @@ struct config* parse_config(FILE *input) {
 						goto parse_err;
 					}
 				} else {
-					if (statsrelay_list_expand(protoc->ring) == NULL) {
+					char **data_ptr = (char **) statsrelay_list_expand(protoc->ring);
+					if (data_ptr == NULL) {
 						stats_error_log("unable to expand list");
 						goto parse_err;
 					}
-					if ((protoc->ring->data[protoc->ring->size - 1]  = strdup(strval)) == NULL) {
+					if ((*data_ptr  = strdup(strval)) == NULL) {
 						stats_error_log("failed to copy string");
 						goto parse_err;
 					}

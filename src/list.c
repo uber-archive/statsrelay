@@ -14,7 +14,7 @@ list_t statsrelay_list_new() {
 	return list;
 }
 
-void* statsrelay_list_expand(list_t list) {
+void** statsrelay_list_expand(list_t list) {
 	size_t index = list->size;
 	list->size++;
 

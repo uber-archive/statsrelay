@@ -16,7 +16,7 @@ list_t statsrelay_list_new();
 
 // get the address for a new item in the list, and ensure its size is
 // expanded
-void *statsrelay_list_expand(list_t list);
+void **statsrelay_list_expand(list_t list);
 
 // deallocate the list
 void statsrelay_list_destroy(list_t list);
