@@ -1,3 +1,9 @@
+statsrelay (1.6.2-2) unstable; urgency=medium
+
+  * Add carbonsink.py to package
+
+ -- Daniel Chen <dchen@cephalopod>  Thu, 15 Jan 2015 18:05:03 -0800
+
 statsrelay (1.6.2-1) unstable; urgency=medium
 
   * New upstream release
