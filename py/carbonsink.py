@@ -255,8 +255,7 @@ def main():
         if args.statsite_instance and args.monitoring_stat:
             filename = os.path.join(
                 args.cache_directory, args.statsite_instance)
-            stat_name = '%s.%s' % (args.prefix, args.monitoring_stat)
-            handler.add_monitoring_sink(filename, stat_name)
+            handler.add_monitoring_sink(filename, args.monitoring_stat)
 
         try:
             with open(args.buffer_shard_file) as buffer_shard_file:
