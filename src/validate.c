@@ -130,5 +130,11 @@ int validate_carbon(const char *line, size_t len) {
 		stats_log("validate: found %d spaces in invalid carbon line", spaces_found);
 		return 1;
 	}
+	if ((strncmp("carbon.", line, 7) != 0) &&
+	    (strncmp("servers.", line, 8) != 0) &&
+	    (strncmp("stats.", line, 6) != 0)) {
+		stats_log("validate: Invalid line \"%.*s\" does not start with (carbon|servers|stats).", len, line);
+		return 1;
+	}
 	return 0;
 }
