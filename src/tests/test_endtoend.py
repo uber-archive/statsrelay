@@ -302,6 +302,12 @@ class CarbonTestCase(TestCase):
         self.check_recv(fd, 'd e f\n')
         sender.sendall('1 2 3\n')
         self.check_recv(fd, '1 2 3\n')
+        sender.sendall('a.b 2 3\n')
+        self.check_recv(fd, 'a.b 2 3\n')
+        sender.sendall('a..b 2 3\n')
+        self.check_recv(fd, 'a.b 2 3\n')
+        sender.sendall('a...b 2 3\n')
+        self.check_recv(fd, 'a.b 2 3\n')
 
         sender = self.connect('tcp', self.bind_carbon_port)
         sender.sendall('status\n')
