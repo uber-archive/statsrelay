@@ -5,7 +5,8 @@ statsrelay_SOURCES=$(BASE_SOURCES) main.c
 stathasher_SOURCES=hashlib.c hashring.c list.c log.c yaml_config.c stathasher.c
 stresstest_SOURCES=stresstest.c
 
-check_PROGRAMS=test_hashlib test_hashring
+check_PROGRAMS=test_hashlib test_hashring test_normalize
 TESTS=$(check_PROGRAMS) tests/test_endtoend.py
 test_hashlib_SOURCES=tests/test_hashlib.c hashlib.c
 test_hashring_SOURCES=tests/test_hashring.c hashlib.c hashring.c list.c log.c
+test_normalize_SOURCES=tests/test_normalize.c normalize.c
