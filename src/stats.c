@@ -47,6 +47,7 @@ struct stats_server_t {
 	hashring_t ring;
 	protocol_parser_t parser;
 	validate_line_validator_t validator;
+	key_normalizer_t normalizer;
 };
 
 typedef struct {
@@ -211,7 +212,8 @@ static void kill_backend(void *data) {
 stats_server_t *stats_server_create(struct ev_loop *loop,
 				    struct proto_config *config,
 				    protocol_parser_t parser,
-				    validate_line_validator_t validator) {
+				    validate_line_validator_t validator,
+				    key_normalizer_t normalizer) {
 	stats_server_t *server;
 	server = malloc(sizeof(stats_server_t));
 	if (server == NULL) {
