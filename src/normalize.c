@@ -18,6 +18,7 @@ int normalize_carbon(char *key, size_t len) {
         if (*ptr1 == '.') {
             if (*ptr2 != '.') {
                 normalized_key[cur_pos] = *ptr1;
+                cur_pos++;
                 ptr1 = ptr2;
             }
             ptr2++;
