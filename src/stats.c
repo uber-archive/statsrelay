@@ -307,6 +307,12 @@ static int stats_relay_line(const char *line, size_t len, stats_server_t *ss) {
 	memcpy(key_buffer, line, key_len);
 	key_buffer[key_len] = '\0';
 
+	if (ss->normalizer != NULL) {
+		if (ss->normalizer(key_buffer, key_len) != 0) {
+			return 1;
+		}
+	}
+
 	stats_backend_t *backend = hashring_choose(ss->ring, key_buffer, NULL);
 
 	if (backend == NULL) {

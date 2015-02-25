@@ -16,6 +16,7 @@ static bool connect_server(struct server *server,
 			   struct proto_config *config,
 			   protocol_parser_t parser,
 			   validate_line_validator_t validator,
+			   key_normalizer_t normalizer,
 			   const char *name) {
 	if (config->ring->size == 0) {
 		stats_log("%s has no backends, skipping", name);
@@ -25,7 +26,7 @@ static bool connect_server(struct server *server,
 	struct ev_loop *loop = ev_default_loop(0);
 
 	server->server = stats_server_create(
-		loop, config, parser, validator);
+		loop, config, parser, validator, normalizer);
 
 	server->enabled = true;
 
@@ -86,11 +87,13 @@ bool connect_server_collection(struct server_collection *server_collection,
 				      &config->carbon_config,
 				      protocol_parser_carbon,
 				      validate_carbon,
+				      normalize_carbon,
 				      "carbon");
 	enabled_any |= connect_server(&server_collection->statsd_server,
 				      &config->statsd_config,
 				      protocol_parser_statsd,
 				      validate_statsd,
+				      NULL,
 				      "statsd");
 	if (!enabled_any) {
 		stats_error_log("failed to enable any backends");

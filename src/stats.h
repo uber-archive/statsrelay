@@ -6,6 +6,7 @@
 
 #include "protocol.h"
 #include "validate.h"
+#include "normalize.h"
 #include "yaml_config.h"
 
 typedef struct stats_server_t stats_server_t;
@@ -14,8 +15,9 @@ stats_server_t *stats_server_create(
 	struct ev_loop *loop,
 	struct proto_config *config,
 	protocol_parser_t parser,
-	validate_line_validator_t validator);
-	stats_server_t *server;
+	validate_line_validator_t validator,
+	key_normalizer_t normalizer);
+stats_server_t *server;
 
 size_t stats_num_backends(stats_server_t *server);
 
