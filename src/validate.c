@@ -130,5 +130,11 @@ int validate_carbon(const char *line, size_t len) {
 		stats_log("validate: found %d spaces in invalid carbon line", spaces_found);
 		return 1;
 	}
+
+	if (strstr(line, "..") != NULL) {
+		stats_log("validate: found invalid carbon line with ..");
+		return 1;
+	}
+
 	return 0;
 }
