@@ -88,7 +88,10 @@ class CarbonSink(Sink):
                 log.exception('Failed to send metrics to %s:%s on attempt %d',
                               self.host, self.port, attempt)
                 self.close()
-                time.sleep(0.1)
+
+                # Only sleep if we are going to retry
+                if self.retries > 1:
+                    time.sleep(0.1)
         log.error('Dropping metric after %d retries', self.retries)
         return False
 
@@ -133,9 +136,9 @@ class MetricHandler(object):
 
     STATHASHER_PATH = '/usr/bin/stathasher'
 
-    def __init__(self, servers, prefix):
+    def __init__(self, servers, prefix, retries=3):
         servers = [x.rsplit(':', 1) for x in servers]
-        self.sinks = [CarbonSink(*x) for x in servers]
+        self.sinks = [CarbonSink(*x, retries=retries) for x in servers]
         self.prefix = prefix
         self.buffer_shards = set()
         self.buffer_dir = None
@@ -251,7 +254,8 @@ def main():
             fmt='%(asctime)s\t%(levelname)s\t%(message)s'))
         log.addHandler(fh)
 
-    with metric_handler(args.servers, args.prefix) as handler:
+    with metric_handler(args.servers, args.prefix,
+                        retries=args.attempts) as handler:
         if args.statsite_instance and args.monitoring_stat:
             filename = os.path.join(
                 args.cache_directory, args.statsite_instance)
