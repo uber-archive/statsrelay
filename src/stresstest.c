@@ -27,8 +27,6 @@ int main(int argc, char **argv) {
 	char c;
 	while ((c = getopt_long(argc, argv, "p:s:h", long_options, &option_index)) != -1) {
 		switch (c) {
-		case -1:
-			break;
 		case 0:
 		case 'h':
 			print_help(argv[0]);
@@ -119,7 +117,10 @@ int main(int argc, char **argv) {
 		}
 		lines_sent++;
 	}
-	if (gettimeofday(&t1, NULL) == -1) {
+
+	if (lines_sent == 0) {
+		goto err;
+	} else if (gettimeofday(&t1, NULL) == -1) {
 		perror("gettimeofday()");
 		goto err;
 	}

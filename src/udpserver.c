@@ -181,9 +181,6 @@ int udpserver_bind(udpserver_t *server,
 			freeaddrinfo(addrs);
 			return 1;
 		}
-		if ((address == NULL) && (p->ai_family != AF_INET6)) {
-			continue;
-		}
 		listener = udplistener_create(server, p, cb_recv);
 		if (listener == NULL) {
 			continue;

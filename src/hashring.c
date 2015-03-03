@@ -86,8 +86,11 @@ size_t hashring_size(hashring_t ring) {
 void* hashring_choose(struct hashring *ring,
 		      const char *key,
 		      uint32_t *shard_num) {
+	if (ring == NULL || ring->backends == NULL) {
+		return NULL;
+	}
 	const size_t ring_size = ring->backends->size;
-	if (ring == NULL || ring_size == 0) {
+	if (ring_size == 0) {
 		return NULL;
 	}
 	const uint32_t index = stats_hash(key, strlen(key), ring_size);
