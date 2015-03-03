@@ -1,3 +1,10 @@
+<<<<<<< HEAD
+statsrelay (1.6.4-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Daniel Chen <dchen@cephalopod>  Mon, 02 Mar 2015 16:02:06 -0800
+
 statsrelay (1.6.3-1) unstable; urgency=medium
 
   * New upstream release
@@ -27,7 +34,6 @@ statsrelay (1.6.0-1) unstable; urgency=low
   * New upstream release
 
  -- Evan Klitzke <uber@evan.dev.uber.com>  Fri, 02 Jan 2015 00:23:12 +0000
-
 statsrelay (1.5.9-2) unstable; urgency=medium
 
   * Restart daemon after package upgrade
