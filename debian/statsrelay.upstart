@@ -1,0 +1,15 @@
+description "statsrelay server"
+
+start on runlevel [5]
+stop on runlevel [!5]
+
+respawn
+respawn limit 10 5
+umask 022
+
+script
+    exec start-stop-daemon --start --quiet --chuid statsrelay --pidfile /var/run/statsrelay.pid \
+        --exec /usr/bin/statsrelay \
+        --make-pidfile
+
+end script
