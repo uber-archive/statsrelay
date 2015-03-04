@@ -126,9 +126,21 @@ int validate_carbon(const char *line, size_t len) {
 			break;
 		}
 	}
+
 	if (spaces_found != 2) {
 		stats_log("validate: found %d spaces in invalid carbon line", spaces_found);
 		return 1;
 	}
+
+	if (strnstr(line, "..", len) != NULL) {
+		stats_log("validate: found carbon line with invalid sequence \"..\"");
+		return 1;
+	}
+
+	if (strnstr(line, "/", len) != NULL) {
+		stats_log("validate: found carbon line with invalid character /");
+		return 1;
+	}
+
 	return 0;
 }
