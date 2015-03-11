@@ -47,6 +47,7 @@ static void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *wat
 		client->connect_watcher.started = false;
 	}
 
+	close(client->sd);
 	stats_error_log("tcpclient[%s]: Connection timeout", client->name);
 	client->last_error = time(NULL);
 	tcpclient_set_state(client, STATE_BACKOFF);
