@@ -1,3 +1,9 @@
+statsrelay (1.6.8-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Daniel Chen <dchen@cephalopod>  Wed, 25 Mar 2015 13:15:05 -0700
+
 statsrelay (1.6.6-1) unstable; urgency=medium
 
   * New upstream release
