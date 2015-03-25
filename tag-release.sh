@@ -12,14 +12,11 @@ git checkout master
 echo "$VERSION" > VERSION
 git commit -m "Release $VERSION" VERSION
 git tag upstream/$VERSION
-
-for distr in precise squeeze ; do
-    git checkout debian-$distr
-    git merge upstream/$VERSION
-    debchange -v $VERSION-1 -D unstable "New upstream release"
-    git commit -m "Updated changelog for $VERSION-1" debian/changelog
-    git tag debian-$distr/$VERSION-1
-done
+git checkout debian
+git merge upstream/$VERSION
+debchange -v $VERSION-1 -D unstable "New upstream release"
+git commit -m "Updated changelog for $VERSION-1" debian/changelog
+git tag debian/$VERSION-1
 
 echo -n "Tagging complete. Are you sure you want to push to origin (yes/no)? "
 read CONFIRM
@@ -28,9 +25,7 @@ if [ "$CONFIRM" != "yes" ]; then
 	exit 2
 fi
 
-for distr in precise squeeze ; do
-    git push origin debian-$distr
-done
+git push origin debian
 git checkout master
 git push origin master
 git push origin --tags
