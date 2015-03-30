@@ -1,3 +1,9 @@
+statsrelay (1.6.8-3) unstable; urgency=medium
+
+  * Add runlevels 2-5 for starting statsrelay
+
+ -- Daniel Chen <dchen@cephalopod>  Mon, 30 Mar 2015 11:04:00 -0700
+
 statsrelay (1.6.8-2) unstable; urgency=medium
 
   * Fix tag-release.sh
