@@ -1,3 +1,9 @@
+statsrelay (1.6.8-3) unstable; urgency=medium
+
+  * Revert to old init script
+
+ -- Daniel Chen <dchen@cephalopod>  Mon, 30 Mar 2015 11:07:54 -0700
+
 statsrelay (1.6.8-2) unstable; urgency=medium
 
   * Fix tag-release.sh
