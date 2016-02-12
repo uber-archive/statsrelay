@@ -20,7 +20,7 @@ Dependencies:
 ```
 apt-get install automake pkg-config libev-dev libyaml-devel
 
-autoreconf --install
+./autogen.sh
 ./configure
 make clean
 make
