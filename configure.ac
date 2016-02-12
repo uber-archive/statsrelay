@@ -1,13 +1,12 @@
 AC_PREREQ([2.68])
 AC_INIT([statsrelay], m4_esyscmd([tr -d '\n' < VERSION]))
 AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
-AC_PROG_CC
-AM_PROG_CC_C_O
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADERS([config.h])
 
 # Checks for programs.
 AC_PROG_CC
+AM_PROG_CC_C_O
 
 # Checks for libraries.
 
