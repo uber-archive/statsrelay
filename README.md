@@ -1,21 +1,24 @@
-# statsrelay
-A consistent-hashing relay for statsd and carbon metrics
+# Statsrelay
+
+Statsrelay is a consistent-hashing relay for statsd and carbon metrics.
 
 [![Build Status](https://travis-ci.org/uber/statsrelay.svg?branch=master)](https://travis-ci.org/uber/statsrelay)
 [![Coverity Status](https://scan.coverity.com/projects/2789/badge.svg)](https://scan.coverity.com/projects/2789)
 [![Mailing List](https://groups.google.com/forum/#!forum/statsrelay-dev)](https://groups.google.com/forum/#!forum/statsrelay-dev)
 
-# License
+## License
 MIT License
-Copyright (c) 2014 Uber Technologies, Inc.
+Copyright (c) 2016 Uber Technologies, Inc.
 
-# Build
+## Build
 
 Dependencies:
 - automake
 - pkg-config
 - libev (>= 4.11)
 - libyaml
+
+On Debian/Ubuntu:
 
 ```
 apt-get install automake pkg-config libev-dev libyaml-devel
@@ -28,7 +31,7 @@ make check
 make install
 ```
 
-# Use
+## Use
 
 ```
 Usage: statsrelay [options]
@@ -97,10 +100,33 @@ backend:127.0.0.2:8127:tcp bytes_queued gauge 27
 backend:127.0.0.2:8127:tcp bytes_sent gauge 27
 backend:127.0.0.2:8127:tcp relayed_lines gauge 3
 backend:127.0.0.2:8127:tcp dropped_lines gauge 0
-
 ```
 
-# Scaling With Virtual Shards
+## Config Options
+
+There are a few options you can use to control the behavior of statsrelay, which
+can be set in `/etc/statsrelay.yaml`. Here is a minimal config:
+
+```yaml
+carbon:
+  bind: 127.0.0.1:9085
+  tcp_cork: true
+  validate: true
+  shard_map:
+    0: 10.10.10.10:9085
+```
+
+Besides the `bind` and `shard_map` settings (explained elsewhere), here is what
+the boolean options do:
+
+ * `tcp_cork` enabled the `TCP_CORK` option on TCP sockets; it's enabled by
+   default and in many cases will significantly decrease the number of small TCP
+   sockets that statsrelay emits (at a small penalty of up to 200ms latency in
+   some cases).
+ * `validate` tries to validate incoming data before forwarding it to statsd or
+   carbon; it's on by default
+
+## Scaling With Virtual Shards
 
 Statsrelay implements a virtual sharding scheme, which allows you to
 easily scale your statsd and carbon backends by reassigning virtual
