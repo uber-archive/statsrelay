@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
 	const char *stat_names = NULL;
 	int option_index = 0;
 	char c;
-	while ((c = getopt_long(argc, argv, "p:s:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "p:s:h", long_options, &option_index)) != 0xFF) {
 		switch (c) {
 		case 0:
 		case 'h':

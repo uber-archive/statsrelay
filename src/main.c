@@ -88,9 +88,11 @@ int main(int argc, char **argv) {
 	servers.initialized = false;
 
 	stats_set_log_level(STATSRELAY_LOG_INFO);  // set default value
-	while (c != -1) {
+	while (c != 0xFF) {
 		c = getopt_long(argc, argv, "t:c:l:vh", long_options, NULL);
 		switch (c) {
+		case 0xFF:
+			break;
 		case 0:
 		case 'h':
 			print_help(argv[0]);
