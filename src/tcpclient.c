@@ -248,7 +248,12 @@ int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, c
 
 	if (client->state == STATE_INIT) {
 		// Resolve address, create socket, set nonblocking, setup callbacks, fire connect
-		if (client->addr == NULL || client->config->always_resolve_dns == true) {
+		if (client->config_always_resolve_dns == true && client->addr != NULL) {
+			freeaddrinfo(client->addr);
+			client->addr = NULL;
+		}
+
+		if (client->addr == NULL) {
 			// We only know about tcp and udp, so if we get something unexpected just
 			// default to tcp
 			if (protocol != NULL && strncmp(protocol, "udp", 3) == 0) {
