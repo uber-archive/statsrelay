@@ -22,11 +22,11 @@ static void print_help(const char *argv0) {
 
 int main(int argc, char **argv) {
 	char *config_name = (char *) default_config;
-	char c = 0;
-	while (c != 0xFF) {
-		c = getopt_long(argc, argv, "c:h", long_options, NULL);
+	int8_t c = 0;
+	while (c != -1) {
+		c = (int8_t)getopt_long(argc, argv, "c:h", long_options, NULL);
 		switch (c) {
-		case 0xFF:
+		case -1:
 			break;
 		case 0:
 		case 'h':
