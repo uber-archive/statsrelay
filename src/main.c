@@ -91,8 +91,6 @@ int main(int argc, char **argv) {
 	while (c != -1) {
 		c = getopt_long(argc, argv, "t:c:l:vh", long_options, NULL);
 		switch (c) {
-		case -1:
-			break;
 		case 0:
 		case 'h':
 			print_help(argv[0]);
