@@ -104,7 +104,7 @@ int tcpclient_init(tcpclient_t *client,
 			free(client->port);
 			return 1;
 		}
-		strncpy(client->protocol, "tcp", 3);
+		strcpy(client->protocol, "tcp");
 	}else{
 		len = strlen(protocol);
 		if((client->protocol = calloc(1, len + 1)) == NULL) {
