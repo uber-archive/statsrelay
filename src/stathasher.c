@@ -22,9 +22,9 @@ static void print_help(const char *argv0) {
 
 int main(int argc, char **argv) {
 	char *config_name = (char *) default_config;
-	char c = 0;
+	int8_t c = 0;
 	while (c != -1) {
-		c = getopt_long(argc, argv, "c:h", long_options, NULL);
+		c = (int8_t)getopt_long(argc, argv, "c:h", long_options, NULL);
 		switch (c) {
 		case -1:
 			break;

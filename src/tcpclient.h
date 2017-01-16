@@ -71,21 +71,25 @@ typedef struct tcpclient_t {
 	int sd;
 	int socktype;
 
+	char *host;
+	char *port;
+	char *protocol;
+
 	struct proto_config *config;
 } tcpclient_t;
 
 int tcpclient_init(tcpclient_t *client,
 		   struct ev_loop *loop,
 		   void *callback_connect,
-		   struct proto_config *config);
+		   struct proto_config *config,
+		   char *host,
+		   char *port,
+		   char *protocol);
 
 void tcpclient_set_sent_callback(tcpclient_t *client,
 				 tcpclient_callback callback);
 
-int tcpclient_connect(tcpclient_t *client,
-		      const char *host,
-		      const char *port,
-		      const char *protocol);
+int tcpclient_connect(tcpclient_t *client);
 
 int tcpclient_sendall(tcpclient_t *client,
 		      const char *buf,

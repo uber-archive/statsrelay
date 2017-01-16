@@ -57,7 +57,12 @@ static void tcpclient_connect_timeout(struct ev_loop *loop, struct ev_timer *wat
 int tcpclient_init(tcpclient_t *client,
 		   struct ev_loop *loop,
 		   void *callback_context,
-		   struct proto_config *config) {
+		   struct proto_config *config,
+		   char *host,
+		   char *port,
+		   char *protocol) {
+	size_t len;
+
 	client->state = STATE_INIT;
 	client->loop = loop;
 	client->sd = -1;
@@ -66,6 +71,51 @@ int tcpclient_init(tcpclient_t *client,
 	client->failing = 0;
 	client->config = config;
 	client->socktype = SOCK_DGRAM;
+
+	if(host == NULL) {
+		stats_error_log("tcpclient_init: host is NULL\n");
+		return 1;
+	}
+	len = strlen(host);
+	if((client->host = calloc(1, len + 1)) == NULL) {
+		stats_error_log("tcpclient[%s]: unable to allocate memory for host\n", client->host);
+		return 1;
+	}
+	strncpy(client->host, host, len);
+
+	if(port == NULL) {
+		stats_error_log("tcpclient_init: port is NULL\n");
+		free(client->host);
+		return 1;
+	}
+	len = strlen(port);
+	if((client->port = calloc(1, len + 1)) == NULL) {
+		stats_error_log("tcpclient[%s]: unable to allocate memory for port\n", client->host);
+		free(client->host);
+		return 1;
+	}
+	strncpy(client->port, port, len);
+
+	if(protocol == NULL) {
+		// Default to TCP if protocol is not set
+		if((client->protocol = calloc(1, 4)) == NULL) {
+			stats_error_log("tcpclient[%s]: unable to allocate memory for protocol\n", client->host);
+			free(client->host);
+			free(client->port);
+			return 1;
+		}
+		strncpy(client->protocol, "tcp", 3);
+	}else{
+		len = strlen(protocol);
+		if((client->protocol = calloc(1, len + 1)) == NULL) {
+			stats_error_log("tcpclient[%s]: unable to allocate memory for protocol\n", client->host);
+			free(client->host);
+			free(client->port);
+			return 1;
+		}
+		strncpy(client->protocol, protocol, len);
+	}
+
 	strncpy(client->name, "UNRESOLVED", TCPCLIENT_NAME_LEN);
 
 	client->callback_connect = &tcpclient_default_callback;
@@ -226,7 +276,7 @@ static void tcpclient_connected(struct ev_loop *loop, struct ev_io *watcher, int
 	client->callback_connect(client, EVENT_CONNECTED, client->callback_context, NULL, 0);
 }
 
-int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, const char *protocol) {
+int tcpclient_connect(tcpclient_t *client) {
 	struct addrinfo hints;
 	struct addrinfo *addr;
 	int sd;
@@ -240,7 +290,7 @@ int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, c
 		// If backoff timer has expired, change to STATE_INIT and call recursively
 		if ((time(NULL) - client->last_error) > TCPCLIENT_RETRY_TIMEOUT) {
 			tcpclient_set_state(client, STATE_INIT);
-			return tcpclient_connect(client, host, port, protocol);
+			return tcpclient_connect(client);
 		} else {
 			return 2;
 		}
@@ -248,28 +298,33 @@ int tcpclient_connect(tcpclient_t *client, const char *host, const char *port, c
 
 	if (client->state == STATE_INIT) {
 		// Resolve address, create socket, set nonblocking, setup callbacks, fire connect
+		if (client->config->always_resolve_dns == true && client->addr != NULL) {
+			freeaddrinfo(client->addr);
+			client->addr = NULL;
+		}
+
 		if (client->addr == NULL) {
 			// We only know about tcp and udp, so if we get something unexpected just
 			// default to tcp
-			if (protocol != NULL && strncmp(protocol, "udp", 3) == 0) {
+			if (strncmp(client->protocol, "udp", 3) == 0) {
 				client->socktype = SOCK_DGRAM;
 			} else {
-				protocol = "tcp";
 				client->socktype = SOCK_STREAM;
 			}
 			memset(&hints, 0, sizeof(hints));
 			hints.ai_family = AF_UNSPEC;
 			hints.ai_socktype = client->socktype;
 			hints.ai_flags = AI_PASSIVE;
-			if (getaddrinfo(host, port, &hints, &addr) != 0) {
-				stats_error_log("tcpclient: Error resolving backend address %s: %s", host, gai_strerror(errno));
+
+			if (getaddrinfo(client->host, client->port, &hints, &addr) != 0) {
+				stats_error_log("tcpclient: Error resolving backend address %s: %s", client->host, gai_strerror(errno));
 				client->last_error = time(NULL);
 				tcpclient_set_state(client, STATE_BACKOFF);
 				client->callback_error(client, EVENT_ERROR, client->callback_context, NULL, 0);
 				return 3;
 			}
 			client->addr = addr;
-			snprintf(client->name, TCPCLIENT_NAME_LEN, "%s/%s/%s", host, port, protocol);
+			snprintf(client->name, TCPCLIENT_NAME_LEN, "%s/%s/%s", client->host, client->port, client->protocol);
 		} else {
 			addr = client->addr;
 		}
@@ -339,7 +394,7 @@ int tcpclient_sendall(tcpclient_t *client, const char *buf, size_t len) {
 	} else {
 		// Does nothing if we're already connected, triggers a
 		// reconnect if backoff has expired.
-		tcpclient_connect(client, NULL, NULL, NULL);
+		tcpclient_connect(client);
 	}
 
 	if (buffer_datacount(&client->send_queue) >= client->config->max_send_queue) {
@@ -401,4 +456,8 @@ void tcpclient_destroy(tcpclient_t *client, int drop_queue) {
 		freeaddrinfo(client->addr);
 	}
 	buffer_destroy(&client->send_queue);
+
+	free(client->host);
+	free(client->port);
+	free(client->protocol);
 }

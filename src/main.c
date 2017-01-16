@@ -82,14 +82,14 @@ static void print_help(const char *argv0) {
 int main(int argc, char **argv) {
 	ev_signal sigint_watcher, sigterm_watcher, sighup_watcher;
 	char *lower;
-	char c = 0;
+	int8_t c = 0;
 	bool just_check_config = false;
 	struct config *cfg = NULL;
 	servers.initialized = false;
 
 	stats_set_log_level(STATSRELAY_LOG_INFO);  // set default value
 	while (c != -1) {
-		c = getopt_long(argc, argv, "t:c:l:vh", long_options, NULL);
+		c = (int8_t)getopt_long(argc, argv, "t:c:l:vh", long_options, NULL);
 		switch (c) {
 		case -1:
 			break;

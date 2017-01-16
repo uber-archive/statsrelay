@@ -32,6 +32,7 @@ static void init_proto_config(struct proto_config *protoc) {
 	protoc->bind = NULL;
 	protoc->enable_validation = true;
 	protoc->enable_tcp_cork = true;
+	protoc->always_resolve_dns = false;
 	protoc->max_send_queue = 134217728;
 	protoc->ring = statsrelay_list_new();
 }
@@ -75,6 +76,7 @@ struct config* parse_config(FILE *input) {
 	bool update_send_queue = false;
 	bool update_validate = false;
 	bool update_tcp_cork = false;
+	bool always_resolve_dns = false;
 	bool expect_shard_map = false;
 	while (keep_going) {
 		if (!yaml_parser_parse(&parser, &event)) {
@@ -146,6 +148,8 @@ struct config* parse_config(FILE *input) {
 						update_validate = true;
 					} else if (strcmp(strval, "tcp_cork") == 0) {
 						update_tcp_cork = true;
+					} else if (strcmp(strval, "always_resolve_dns") == 0) {
+						always_resolve_dns = true;
 					}
 				} else {
 					if (update_bind) {
@@ -168,6 +172,10 @@ struct config* parse_config(FILE *input) {
 							goto parse_err;
 						}
 						update_tcp_cork = false;
+					} else if (always_resolve_dns) {
+						if (!set_boolean(strval, &protoc->always_resolve_dns)) {
+							goto parse_err;
+						}
 					}
 				}
 				break;

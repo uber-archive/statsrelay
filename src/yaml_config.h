@@ -12,6 +12,7 @@ struct proto_config {
 	char *bind;
 	bool enable_validation;
 	bool enable_tcp_cork;
+	bool always_resolve_dns;
 	uint64_t max_send_queue;
 	list_t ring;
 };

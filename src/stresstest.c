@@ -24,8 +24,8 @@ int main(int argc, char **argv) {
 	uint16_t port = 0;
 	const char *stat_names = NULL;
 	int option_index = 0;
-	char c;
-	while ((c = getopt_long(argc, argv, "p:s:h", long_options, &option_index)) != -1) {
+	int8_t c;
+	while ((c = (int8_t)getopt_long(argc, argv, "p:s:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 0:
 		case 'h':
