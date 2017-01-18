@@ -1,3 +1,9 @@
+**Important Update:** We at Uber have moved on to an in-house metrics system
+that is not built on statsd/carbon. As a result, we no longer use statsrelay in
+any significant capacity, and we are no longer actively developing statsrelay.
+That said, we are still happy to see PRs and bugfixes if you have them, but it
+may a bit longer to get them landed!
+
 # Statsrelay
 
 Statsrelay is a consistent-hashing relay for statsd and carbon metrics.
