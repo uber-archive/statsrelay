@@ -1,5 +1,7 @@
 # Statsrelay
 
+(This project is deprecated and not maintained.)
+
 Statsrelay is a consistent-hashing relay for statsd and carbon metrics.
 
 [![Build Status](https://travis-ci.org/uber/statsrelay.svg?branch=master)](https://travis-ci.org/uber/statsrelay)
